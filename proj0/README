@@ -1,0 +1,35 @@
+# --- READ ME --- #
+
+NAME: Ege Tanboga
+EMAIL: ege72282@gmail.com
+UID: 304735411
+
+## for file descriptors: ##
+https://web.cs.ucla.edu/classes/spring18/cs111/projects/fd_juggling.html
+
+## for get_opt long: ##
+https://www.gnu.org/software/libc/manual/html_node/Getopt-Long-Option-Example.html
+http://www.informit.com/articles/article.aspx?p=175771&seqNum=3
+
+## to catch up on gdb: ##
+https://darkdust.net/files/GDB%20Cheat%20Sheet.pdf
+
+## file I/O ##
+
+https://www.classes.cs.uchicago.edu/archive/2017/winter/51081-1/LabFAQ/lab2/fileio.html
+
+## File Explanations ##
+
+lab0.c is the source file for the project, it has functions to create seg fault, catch fault and transfer bytes. It first gets the arguments passed in and saves them into variables. the order of checks are performed as specified in the spec, first the signal handler is registered, then segfault is caused if the respective flag is passed in. If there was none of these, then the file will be copied from stdin to stdout
+
+## Make file ##
+
+contains different builds specified
+
+default: builds lab0.c with -Wextra and -Wall as specified in the spec, along with -g for debugging
+
+dist: makes the tarball
+
+check: contains different test cases for segfault option, and checks for exit codes specified in the spec for each option. For example, if input file doesn't exist, then the specific case tests if the exit code returned is 2. For the case where the copying succeeds, the test case also checks if the files are equal,using the cmp function. comparing and checking if the exit code returned is 0 could be divided into two functions, but I thought it would be useful to have it in one as they are related to each other. segFault checks exit code as 4 when that argument is passed, invalidArg checks exit code as 1 if the arguments specified are invalid and outputErrorTest checks if the proper exit code is returned if the output file cannot be written to
+
+clean: removes the executable and any files created through the process (such as text files)
