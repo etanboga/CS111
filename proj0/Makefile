@@ -1,3 +1,7 @@
+#Name: Ege Tanboga
+#email: ege72282@gmail.com
+#ID: 304735411
+
 .SILENT:
 
 tarred_files = Makefile lab0.c backtrace.png breakpoint.png README
