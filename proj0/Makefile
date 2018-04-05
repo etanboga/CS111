@@ -9,7 +9,7 @@ tarred_files = Makefile lab0.c backtrace.png breakpoint.png README
 default:
 	gcc -g -Wall -Wextra lab0.c -o lab0
 clean:
-	rm -f *.o *.txt *.o *.tar.gz
+	rm -f *.o *.txt  *.tar.gz lab0
 dist: default
 	tar -czf lab0-304735411.tar.gz $(tarred_files)
 
