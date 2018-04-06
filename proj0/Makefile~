@@ -36,7 +36,7 @@ inputErrorTest:
 	if [[ $$? -ne 2 ]]; then \
 	echo "test failed for no input file"; \
 	else \
-	echo "passed test for no input file"; \
+	echo "test passed for no input file"; \
 	fi
 
 outputErrorTest:
@@ -47,7 +47,7 @@ outputErrorTest:
 	if [[ $$? -ne 3 ]]; then \
 	echo "test failed for unable to open/write to output file"; \
 	else \
-	echo "passed test for unable to open/write to output file"; \
+	echo "test passed for unable to open/write to output file"; \
 	fi
 	chmod u+w output.txt
 	rm input.txt output.txt
@@ -58,12 +58,12 @@ successfulCopyTest:
 	if [[ $$? -ne 0 ]]; then \
 	echo "test failed for proper exit code when copied"; \
 	else \
-	echo "passed test for proper exit code when copied"; \
+	echo "test passed for proper exit code when copied"; \
 	fi; \
 	cmp input.txt output.txt; \
         if [[ $$? -ne 0 ]]; then \
         echo "test failed for input file matches output file"; \
         else \
-        echo "passed test for input matches output"; \
+        echo "test passed for input matches output"; \
         fi
 	rm input.txt output.txt

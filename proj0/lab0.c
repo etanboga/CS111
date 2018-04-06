@@ -4,12 +4,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
-#include <signal.h>
 #include <errno.h>
+#include <getopt.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 void print_guidelines_and_exit() {
     printf("Usage: lab0 --input file1 --output file2 --segfault --catch");

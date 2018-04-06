@@ -18,9 +18,12 @@ https://darkdust.net/files/GDB%20Cheat%20Sheet.pdf
 
 https://www.classes.cs.uchicago.edu/archive/2017/winter/51081-1/LabFAQ/lab2/fileio.html
 
-## Make File Refresher ##
+## Make File ##
 
 https://www.cs.swarthmore.edu/~newhall/unixhelp/howto_makefiles.html
+https://stackoverflow.com/questions/4927676/implementing-make-check-or-make-test
+https://stackoverflow.com/questions/1484817/how-do-i-make-a-simple-makefile-for-gcc-on-linux
+https://www.gnu.org/software/make/manual/make.html#toc-How-to-Run-make
 
 ## File Explanations ##
 
