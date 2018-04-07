@@ -16,6 +16,10 @@ void print_guidelines_and_exit() {
 }
 
 int main(int argc, char **argv) {
+    
+    //before anything, grab current terminal options and save it somewhere
+    //change to new terminal options
+    //options should be restored after all returned input has been processed
     static struct option long_options[] = {
         {"shell", no_argument, 0, 's'},
         {"debug", no_argument, 0, 'd'},
@@ -27,14 +31,16 @@ int main(int argc, char **argv) {
         switch(option) {
             case 's':
                 shell = 1;
-                printf("Passed shell option, shell flag: %d", shell);
                 break;
             case 'd':
                 debug = 1;
-                printf("Passed debug option, debug flag: %d", debug);
+                break;
             default:
                 print_guidelines_and_exit();
         }
+    }
+    if (debug && shell) {
+        printf("shell and debug arguments are passed, shell: %d, debug: %d", shell, debug);
     }
     return 0;
 }
