@@ -16,6 +16,9 @@ struct termios program_terminal_state;
 //for debugging option
 
 int debug = 0;
+int pipe_write_shell[2];
+int pipe_write_terminal[2];
+pid_t child_id;
 
 //define constants for exit state
 
@@ -47,7 +50,7 @@ void save_terminal_state() {
     if (term == -1) {
         print_error_and_exit("Error saving terminal state", errno);
     } else if (debug) {
-        printf("Saved terminal state successfully \n");
+        printf("Saved terminal state successfully\n");
     }
 }
 
@@ -56,14 +59,14 @@ void restore_terminal_state() {
     if (restoreterm == -1) {
         print_error_and_exit("Couldn't restore terminal state", errno);
     } else if (debug) {
-        printf("restored terminal state properly \n");
+        printf("restored terminal state properly\n");
     }
 }
 
 void set_program_terminal_state() {
     int term = tcgetattr(STDIN_FILENO, &program_terminal_state);
     if (term == -1) {
-        print_error_and_exit("Error saving terminal state before setting it for the program \n", errno);
+        print_error_and_exit("Error saving terminal state before setting it for the program", errno);
     }
     program_terminal_state.c_iflag = ISTRIP;
     program_terminal_state.c_oflag = 0;
@@ -72,7 +75,7 @@ void set_program_terminal_state() {
     if (setterm == -1) {
         print_error_and_exit("Couldn't set program terminal state", errno);
     } else if (debug) {
-        printf("Set terminal state \n");
+        printf("Set terminal state\n");
     }
     atexit(restore_terminal_state);
 }
@@ -103,14 +106,14 @@ void write_many(int fd, char* buffer, size_t size, int debug) {
             case 0x04: //for ^D
                 restore_terminal_state();
                 if (debug) {
-                    printf("Exiting program using option ^D \n");
+                    printf("Exiting program using option ^D\n");
                 }
                 exit(0);
                 break;
             case 0x0D: //for \r -> Carriage return
             case 0x0A: { //for \n -> newline
                 if (debug) {
-                    printf("Entered option for EOF");
+                    printf("Entered option for EOF\n");
                 }
                 char eofchars[2];
                 eofchars[0] = '\r';
@@ -122,6 +125,25 @@ void write_many(int fd, char* buffer, size_t size, int debug) {
                 secure_write(fd, current_char_ptr, 1);
         }
         
+    }
+}
+
+//MARK: - shell option functions
+
+void initialize_pipe(int pipefd[2]) {
+    int pipereturn = pipe(pipefd);
+    if (pipereturn == -1) {
+        print_error_and_exit("Couldn't create pipe", errno);
+    }
+    if (debug) {
+        printf("initialized pipe %p\n", pipefd);
+    }
+}
+
+void secure_fork() {
+    child_id = fork();
+    if (child_id == -1) {
+        print_error_and_exit("Fork failed", errno);
     }
 }
 
@@ -149,14 +171,27 @@ int main(int argc, char **argv) {
         }
     }
     if (debug && shell) {
-        printf("shell and debug arguments are passed, shell: %d, debug: %d \n", shell, debug);
+        printf("shell and debug arguments are passed, shell: %d, debug: %d\n", shell, debug);
     }
     save_terminal_state();
     set_program_terminal_state();
     //read files as they are inputted into the keyboard
     if (shell) {
         if (debug) {
-            printf("entered shell option \n");
+            printf("entered shell option\n");
+        }
+        initialize_pipe(pipe_write_shell);
+        initialize_pipe(pipe_write_terminal);
+        secure_fork();
+        if (child_id == 0) {
+            if (debug) {
+                printf("in child process\n");
+            }
+        } else {
+            if (debug) {
+                printf("in parent process\n");
+                wait(&child_id);
+            }
         }
     } else {
         ssize_t bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
