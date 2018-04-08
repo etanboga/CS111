@@ -1,3 +1,10 @@
 Name: Ege Tanboga
 email: ege72282@gmail.com
 UID: 304735411
+
+
+Resources:
+
+Terminal manipulation: 
+http://pubs.opengroup.org/onlinepubs/007904875/functions/tcgetattr.html
+http://pubs.opengroup.org/onlinepubs/7908799/xsh/termios.h.html
