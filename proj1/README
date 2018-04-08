@@ -5,6 +5,21 @@ UID: 304735411
 
 Resources:
 
+Terminal I/O:
+https://ccle.ucla.edu/pluginfile.php/2303515/mod_resource/content/0/Project%200.pdf
 Terminal manipulation: 
 http://pubs.opengroup.org/onlinepubs/007904875/functions/tcgetattr.html
 http://pubs.opengroup.org/onlinepubs/7908799/xsh/termios.h.html
+
+
+README:
+
+Includes the main resources I have looked into throughout the development of the project as well as explanations of how I approached the problem.
+
+Makefile:
+
+Includes commands to clean, make and tar the project. Clean gets rid of the executable along with any .o files and the tarball. dist, tarballs the project into the zip format specified by the spec. make builds the executable with the flags specified in the spec along with -g for debugging.
+
+Lab1a.c:
+
+This contains the source code for the project. The program is built incrementally with the steps specified in the spec. First, input and output is 

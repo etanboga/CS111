@@ -90,7 +90,7 @@ ssize_t secure_write(int fd, void* buffer, size_t size) {
     return bytes_written;
 }
 
-ssize_t write_many(int fd, char* buffer, size_t size, int debug) {
+void write_many(int fd, char* buffer, size_t size, int debug) {
     for (size_t i = 0; i < size; i++) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
@@ -117,7 +117,6 @@ ssize_t write_many(int fd, char* buffer, size_t size, int debug) {
         }
         
     }
-    return 0;
 }
 
 //MARK: - Main function!
@@ -149,12 +148,17 @@ int main(int argc, char **argv) {
     save_terminal_state(debug);
     set_program_terminal_state(debug);
     //read files as they are inputted into the keyboard
-    
-    ssize_t bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
-    while (bytes_read > 0) {
-        //write
-        write_many(STDOUT_FILENO, buff, bytes_read, debug);
-        bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
+    if (shell) {
+        if (debug) {
+            printf("entered shell option");
+        }
+    } else {
+        ssize_t bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
+        while (bytes_read > 0) {
+            //write
+            write_many(STDOUT_FILENO, buff, bytes_read, debug);
+            bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
+        }
     }
     restore_terminal_state(debug);
     exit(0);
