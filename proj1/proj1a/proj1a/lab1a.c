@@ -13,6 +13,10 @@
 struct termios default_terminal_state;
 struct termios program_terminal_state;
 
+//for debugging option
+
+int debug = 0;
+
 //define constants for exit state
 
 const int FAIL_EXIT_CODE = 1;
@@ -38,7 +42,7 @@ void print_guidelines_and_exit() {
 
 //MARK: - terminal functions
 
-void save_terminal_state(int debug) {
+void save_terminal_state() {
     int term = tcgetattr(STDIN_FILENO, &default_terminal_state);
     if (term == -1) {
         print_error_and_exit("Error saving terminal state", errno);
@@ -47,7 +51,16 @@ void save_terminal_state(int debug) {
     }
 }
 
-void set_program_terminal_state(int debug) {
+void restore_terminal_state() {
+    int restoreterm = tcsetattr(STDIN_FILENO, TCSANOW, &default_terminal_state);
+    if (restoreterm == -1) {
+        print_error_and_exit("Couldn't restore terminal state", errno);
+    } else if (debug) {
+        printf("restored terminal state properly \n");
+    }
+}
+
+void set_program_terminal_state() {
     int term = tcgetattr(STDIN_FILENO, &program_terminal_state);
     if (term == -1) {
         print_error_and_exit("Error saving terminal state before setting it for the program \n", errno);
@@ -61,16 +74,9 @@ void set_program_terminal_state(int debug) {
     } else if (debug) {
         printf("Set terminal state \n");
     }
+    atexit(restore_terminal_state);
 }
 
-void restore_terminal_state(int debug) {
-    int restoreterm = tcsetattr(STDIN_FILENO, TCSANOW, &default_terminal_state);
-    if (restoreterm == -1) {
-        print_error_and_exit("Couldn't restore terminal state", errno);
-    } else if (debug) {
-        printf("restored terminal state properly \n");
-    }
-}
 
 //read and write functions
 
@@ -95,7 +101,7 @@ void write_many(int fd, char* buffer, size_t size, int debug) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
             case 0x04: //for ^D
-                restore_terminal_state(debug);
+                restore_terminal_state();
                 if (debug) {
                     printf("Exiting program using option ^D \n");
                 }
@@ -128,7 +134,7 @@ int main(int argc, char **argv) {
         {"debug", no_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
-    int shell = 0, debug = 0;
+    int shell = 0;
     int option;
     while ((option = getopt_long(argc, argv, "sd", long_options, NULL)) != -1 ) {
         switch(option) {
@@ -145,12 +151,12 @@ int main(int argc, char **argv) {
     if (debug && shell) {
         printf("shell and debug arguments are passed, shell: %d, debug: %d \n", shell, debug);
     }
-    save_terminal_state(debug);
-    set_program_terminal_state(debug);
+    save_terminal_state();
+    set_program_terminal_state();
     //read files as they are inputted into the keyboard
     if (shell) {
         if (debug) {
-            printf("entered shell option");
+            printf("entered shell option \n");
         }
     } else {
         ssize_t bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
@@ -160,6 +166,5 @@ int main(int argc, char **argv) {
             bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
         }
     }
-    restore_terminal_state(debug);
     exit(0);
 }
