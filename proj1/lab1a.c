@@ -59,7 +59,7 @@ void restore_terminal_state() {
     if (restoreterm == -1) {
         print_error_and_exit("Couldn't restore terminal state", errno);
     } else if (debug) {
-        printf("restored terminal state properly\n");
+        printf("restored terminal state properly in process id: %d \n", getpid());
     }
 }
 
@@ -185,11 +185,11 @@ int main(int argc, char **argv) {
         secure_fork();
         if (child_id == 0) {
             if (debug) {
-                printf("in child process\n");
+                printf("in child process, processid: %d\n", getpid());
             }
         } else {
             if (debug) {
-                printf("in parent process\n");
+                printf("in parent process, processid: %d\n", getpid());
                 wait(&child_id);
             }
         }
