@@ -16,6 +16,13 @@ Polling:
 http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/poll.h.html
 http://man7.org/linux/man-pages/man2/poll.2.html
 
+Pipes:
+
+https://www.geeksforgeeks.org/c-program-demonstrate-fork-and-pipe/
+
+Dup2:
+
+https://www.geeksforgeeks.org/dup-dup2-linux-system-call/
 
 README:
 

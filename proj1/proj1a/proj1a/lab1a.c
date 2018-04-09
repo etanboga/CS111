@@ -14,6 +14,9 @@
 struct termios default_terminal_state;
 struct termios program_terminal_state;
 
+//Problems? can exit with ^C even though kill is not set up yet. Is that because I have two terminal structs globally declared?
+// Shell commands are not processed properly
+
 int debug = 0;
 int shell = 0;
 int to_shell[2]; //reads terminal and outputs to shell
@@ -62,6 +65,9 @@ void restore_terminal_state() {
         print_error_and_exit("Couldn't restore terminal state", errno);
     }
     if (shell) {
+        if (debug) {
+            printf("Entered shell part of restoring terminal state");
+        }
         int status;
         pid_t returnpid = waitpid(child_id, &status, 0);
         if (returnpid == -1) {
@@ -89,7 +95,6 @@ void set_program_terminal_state() {
     } else if (debug) {
         printf("Set terminal state\n");
     }
-    atexit(restore_terminal_state);
 }
 
 
@@ -119,26 +124,35 @@ void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
                 printf("pressed control C, should kill shell here");
                 break;
             case 0x04: //for ^D
-                restore_terminal_state();
-                if (debug) {
-                    printf("Exiting program using option ^D\n");
+                   if (shell) {
+                        int returnclose = close(to_shell[1]);
+                        if (returnclose == -1) {
+                            print_error_and_exit("Couldn't close pipe to shell in ^D", errno);
+                        }
+                    if (debug) {
+                        printf("Exiting program using option ^D\n");
+                    }
                 }
-                exit(0);
+                exit(SUCCESS_EXIT_CODE);
                 break;
             case 0x0D: //for \r -> Carriage return
             case 0x0A:
-                if (!is_to_shell) { //for \n -> newline, if writing to stdout, nothing if
+                if (is_to_shell) { //if writing to shell, write as newline
+                    char newline[1];
+                    newline[0] = '\n';
+                    secure_write(fd,newline, 1);
+                }
+                else { //for \n -> newline, if writing to stdout, nothing if
                     if (debug) {    //writing to shell
                         printf("Entered option for EOF, when not writing to shell \n");
                     }
                     char eofchars[2] = {'\r', '\n'};
                     secure_write(fd, eofchars, 2);
                 }
-            break;
+                break;
             default:
                 secure_write(fd, current_char_ptr, 1);
         }
-        
     }
 }
 
@@ -158,6 +172,8 @@ void secure_fork() {
     child_id = fork();
     if (child_id == -1) {
         print_error_and_exit("Fork failed", errno);
+    } else if (debug) {
+        printf("Fork successfull");
     }
 }
 
@@ -171,26 +187,50 @@ void secure_shell() {
     }
 }
 
-void process_poll() {
+int process_poll() {
+    int should_continue_loop = 1;
+    if (debug) {
+        printf("in process poll");
+    }
     int pollresult = poll(poll_file_d, NUM_FDS, 0);
     if (pollresult == -1) {
         print_error_and_exit("Error setting up poll", errno);
     }
-    if (pollresult != 0)  { //if one of the file descriptors is ready
-        if (poll_file_d[0].revents && POLLIN) {
-            //we can read from standard input
-            char buffer_stdin[BUFFER_SIZE];
-            ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
-            write_many(STDOUT_FILENO, buffer_stdin, bytes_read, 0); //write out
-            write_many(to_shell[1], buffer_stdin, bytes_read, 1); //send to shell
-        }
-        if (poll_file_d[1].revents && POLLIN) {
-            //we can read from the shell
-            char buffer_shell[BUFFER_SIZE];
-            ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
-            write_many(STDOUT_FILENO, buffer_shell, bytes_read, 0);
-        }
+    //if none of the file descriptors are ready, return for next iteration
+    if (pollresult == 0) {
+        return should_continue_loop;
     }
+    if (poll_file_d[0].revents & POLLIN) {
+        //we can read from standard input
+        if (debug) {
+            printf("Reading from standard input");
+        }
+        char buffer_stdin[BUFFER_SIZE];
+        ssize_t bytes_read = secure_read(STDIN_FILENO, buffer_stdin, BUFFER_SIZE);
+        write_many(STDOUT_FILENO, buffer_stdin, bytes_read, 0); //write out
+        write_many(to_shell[1], buffer_stdin, bytes_read, 1); //send to shell
+    }
+    if (poll_file_d[1].revents & POLLIN) {
+        //we can read from the shell
+        if (debug) {
+            printf("Reading from shell");
+        }
+        char buffer_shell[BUFFER_SIZE];
+        ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
+        write_many(STDOUT_FILENO, buffer_shell, bytes_read, 0);
+    }
+    if (poll_file_d[1].revents & (POLLERR | POLLHUP)) {
+        //shell shut down
+        if (debug) {
+            printf("Closing shell");
+        }
+        int returnclose = close(to_shell[1]); //stop writing to shell
+        if (returnclose == -1) {
+            print_error_and_exit("Couldn't close writing to shell in POLLERR", errno);
+        }
+        should_continue_loop = -1;
+    }
+    return should_continue_loop;
 }
 
 //MARK: - Main function!
@@ -220,6 +260,7 @@ int main(int argc, char **argv) {
     }
     save_terminal_state();
     set_program_terminal_state();
+    atexit(restore_terminal_state);
     //read files as they are inputted into the keyboard
     if (shell) {
         if (debug) {
@@ -283,12 +324,16 @@ int main(int argc, char **argv) {
                 poll_file_d[0].events = POLLIN;
                 poll_file_d[1].fd = to_terminal[0];
                 poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
-                for (;;) {
+                int should_continue = 1;
+                while (should_continue != -1) {
+                    should_continue = process_poll();
                 }
-            
             }
         }
     } else {
+        if (debug) {
+            printf("Entered default option");
+        }
         ssize_t bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
         while (bytes_read > 0) {
             //write
@@ -296,5 +341,5 @@ int main(int argc, char **argv) {
             bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
         }
     }
-    exit(0);
+    exit(SUCCESS_EXIT_CODE);
 }
