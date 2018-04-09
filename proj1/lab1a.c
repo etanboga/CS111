@@ -13,11 +13,10 @@
 struct termios default_terminal_state;
 struct termios program_terminal_state;
 
-//for debugging option
-
 int debug = 0;
-int pipe_write_shell[2];
-int pipe_write_terminal[2];
+int shell = 0;
+int to_shell[2]; //reads terminal and outputs to shell
+int to_terminal[2]; //reads shell and outputs to terminal
 pid_t child_id;
 
 //define constants for exit state
@@ -58,8 +57,18 @@ void restore_terminal_state() {
     int restoreterm = tcsetattr(STDIN_FILENO, TCSANOW, &default_terminal_state);
     if (restoreterm == -1) {
         print_error_and_exit("Couldn't restore terminal state", errno);
-    } else if (debug) {
-        printf("restored terminal state properly in process id: %d \n", getpid());
+    }
+    if (shell) {
+        int status;
+        pid_t returnpid = waitpid(child_id, &status, 0);
+        if (returnpid == -1) {
+            print_error_and_exit("Error waiting for child", errno);
+        } else if (debug) {
+            printf("restored terminal state properly in process id: %d \n", getpid());
+        }
+    }
+    else if (debug) {
+        printf("restored terminal state properly for default behaviour");
     }
 }
 
@@ -103,6 +112,9 @@ void write_many(int fd, char* buffer, size_t size, int debug) {
     for (size_t i = 0; i < size; i++) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
+            case 0x03:
+                printf("pressed control C, should kill shell here");
+                break;
             case 0x04: //for ^D
                 restore_terminal_state();
                 if (debug) {
@@ -147,6 +159,16 @@ void secure_fork() {
     }
 }
 
+void secure_shell() {
+    int execreturn = execv("/bin/bash", NULL);
+    if (execreturn == -1) {
+        print_error_and_exit("Exec of bash failed", errno);
+    }
+    if (debug) {
+        printf("Executing bash shell");
+    }
+}
+
 //MARK: - Main function!
 
 int main(int argc, char **argv) {
@@ -156,7 +178,6 @@ int main(int argc, char **argv) {
         {"debug", no_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
-    int shell = 0;
     int option;
     while ((option = getopt_long(argc, argv, "sd", long_options, NULL)) != -1 ) {
         switch(option) {
@@ -180,17 +201,60 @@ int main(int argc, char **argv) {
         if (debug) {
             printf("entered shell option\n");
         }
-        initialize_pipe(pipe_write_shell);
-        initialize_pipe(pipe_write_terminal);
+        initialize_pipe(to_shell);
+        initialize_pipe(to_terminal);
         secure_fork();
         if (child_id == 0) {
             if (debug) {
                 printf("in child process, processid: %d\n", getpid());
             }
+            int returnclose_child = close(to_shell[1]); //don't need to write to shell
+            if (returnclose_child == -1) {
+                print_error_and_exit("Couldn't close pipe to write to shell in child", errno);
+            }
+            if (debug) {
+                printf("Closed pipe to write to terminal in child");
+            }
+            returnclose_child = close(to_terminal[0]); //don't need to read from shell
+            if (returnclose_child == -1) {
+                print_error_and_exit("Couldn't close pipe to read from shell in child", errno);
+            }
+            if (debug) {
+                printf("Closed pipe to read from shell in child");
+            }
+            int dupcheck;
+            dupcheck = dup2(to_shell[0], STDIN_FILENO); //read terminal and write to terminal
+            if (dupcheck == -1) {
+                print_error_and_exit("error duplicating input in child", errno);
+            }
+//            dupcheck = dup2(to_terminal[1], STDOUT_FILENO);
+//            if (dupcheck == -1) {
+//                print_error_and_exit("error duplicating output in child", errno);
+//            }
+//            dupcheck = dup2(to_terminal[1], STDERR_FILENO);
+//            if (dupcheck == -1) {
+//                print_error_and_exit("Error duplicating standard error in child", errno);
+//            }
+//            returnclose_child = close(to_shell[0]);
+//            if (returnclose_child == -1) {
+//                print_error_and_exit("Couldn't close pipe to read terminal in child", errno);
+//            }
+//            returnclose_child = close(to_terminal[1]);
+//            if (returnclose_child == -1) {
+//                print_error_and_exit("Couldn't close pipe to write to terminal in child", errno);
+//            }
+            secure_shell();
         } else {
             if (debug) {
                 printf("in parent process, processid: %d\n", getpid());
-                wait(&child_id);
+            }
+            int returnclose_parent = close(to_terminal[1]); //don't need to write to terminal
+            if (returnclose_parent == -1) {
+                print_error_and_exit("Couldn't close pipe to write to terminal in parent", errno);
+            }
+            returnclose_parent = close(to_shell[0]); //don't need to read from terminal
+            if (returnclose_parent == -1) {
+                print_error_and_exit("Couldn't close pipe to read from terminal in parent", errno);
             }
         }
     } else {
