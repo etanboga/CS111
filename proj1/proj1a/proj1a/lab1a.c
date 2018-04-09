@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <poll.h>
 
 struct termios default_terminal_state;
 struct termios program_terminal_state;
@@ -18,11 +19,13 @@ int shell = 0;
 int to_shell[2]; //reads terminal and outputs to shell
 int to_terminal[2]; //reads shell and outputs to terminal
 pid_t child_id;
+struct pollfd poll_file_d[2];
 
 //define constants for exit state
 
 const int FAIL_EXIT_CODE = 1;
 const int SUCCESS_EXIT_CODE = 0;
+const nfds_t NUM_FDS = 2;
 
 //buffer with recommended size in the spec
 
@@ -108,7 +111,7 @@ ssize_t secure_write(int fd, void* buffer, size_t size) {
     return bytes_written;
 }
 
-void write_many(int fd, char* buffer, size_t size, int debug) {
+void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
     for (size_t i = 0; i < size; i++) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
@@ -123,15 +126,14 @@ void write_many(int fd, char* buffer, size_t size, int debug) {
                 exit(0);
                 break;
             case 0x0D: //for \r -> Carriage return
-            case 0x0A: { //for \n -> newline
-                if (debug) {
-                    printf("Entered option for EOF\n");
+            case 0x0A:
+                if (!is_to_shell) { //for \n -> newline, if writing to stdout, nothing if
+                    if (debug) {    //writing to shell
+                        printf("Entered option for EOF, when not writing to shell \n");
+                    }
+                    char eofchars[2] = {'\r', '\n'};
+                    secure_write(fd, eofchars, 2);
                 }
-                char eofchars[2];
-                eofchars[0] = '\r';
-                eofchars[1] = '\n';
-                secure_write(fd, eofchars, 2);
-            }
             break;
             default:
                 secure_write(fd, current_char_ptr, 1);
@@ -166,6 +168,28 @@ void secure_shell() {
     }
     if (debug) {
         printf("Executing bash shell");
+    }
+}
+
+void process_poll() {
+    int pollresult = poll(poll_file_d, NUM_FDS, 0);
+    if (pollresult == -1) {
+        print_error_and_exit("Error setting up poll", errno);
+    }
+    if (pollresult != 0)  { //if one of the file descriptors is ready
+        if (poll_file_d[0].revents && POLLIN) {
+            //we can read from standard input
+            char buffer_stdin[BUFFER_SIZE];
+            ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
+            write_many(STDOUT_FILENO, buffer_stdin, bytes_read, 0); //write out
+            write_many(to_shell[1], buffer_stdin, bytes_read, 1); //send to shell
+        }
+        if (poll_file_d[1].revents && POLLIN) {
+            //we can read from the shell
+            char buffer_shell[BUFFER_SIZE];
+            ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
+            write_many(STDOUT_FILENO, buffer_shell, bytes_read, 0);
+        }
     }
 }
 
@@ -255,13 +279,20 @@ int main(int argc, char **argv) {
             returnclose_parent = close(to_shell[0]); //don't need to read from terminal
             if (returnclose_parent == -1) {
                 print_error_and_exit("Couldn't close pipe to read from terminal in parent", errno);
+                poll_file_d[0].fd = STDIN_FILENO;
+                poll_file_d[0].events = POLLIN;
+                poll_file_d[1].fd = to_terminal[0];
+                poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
+                for (;;) {
+                }
+            
             }
         }
     } else {
         ssize_t bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
         while (bytes_read > 0) {
             //write
-            write_many(STDOUT_FILENO, buff, bytes_read, debug);
+            write_many(STDOUT_FILENO, buff, bytes_read, 0);
             bytes_read = secure_read(STDIN_FILENO, buff, BUFFER_SIZE);
         }
     }
