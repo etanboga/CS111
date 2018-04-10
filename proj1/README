@@ -24,6 +24,14 @@ Dup2:
 
 https://www.geeksforgeeks.org/dup-dup2-linux-system-call/
 
+Signal handling:
+
+https://www.tutorialspoint.com/c_standard_library/c_function_signal.htm
+
+Kill example:
+
+https://www.gnu.org/software/libc/manual/html_node/Kill-Example.html
+
 README:
 
 Includes the main resources I have looked into throughout the development of the project as well as explanations of how I approached the problem.

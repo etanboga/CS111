@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <string.h>
 #include <poll.h>
+#include <signal.h>
 
 struct termios default_terminal_state;
 struct termios program_terminal_state;
@@ -75,6 +76,7 @@ void restore_terminal_state() {
         } else if (debug) {
             printf("restored terminal state properly in process id: %d \n", getpid());
         }
+        fprintf(stderr, "SHELL EXIT SIGNAL=%d STATUS=%d\n", WTERMSIG(status), WEXITSTATUS(status));
     }
     else if (debug) {
         printf("restored terminal state properly for default behaviour");
@@ -121,11 +123,15 @@ void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
             case 0x03:
-                printf("pressed control C, should kill shell here");
-                break;
+                if (shell) {
+                    if (debug) {
+                        printf("Killing shell");
+                    }
+                    kill(child_id, SIGINT);
+                }
             case 0x04: //for ^D
                    if (shell) {
-                        int returnclose = close(to_shell[1]);
+                        int returnclose = close(to_shell[1]); //don't write to shell
                         if (returnclose == -1) {
                             print_error_and_exit("Couldn't close pipe to shell in ^D", errno);
                         }
@@ -143,9 +149,9 @@ void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
                     secure_write(fd,newline, 1);
                 }
                 else { //for \n -> newline, if writing to stdout, nothing if
-                    if (debug) {    //writing to shell
-                        printf("Entered option for EOF, when not writing to shell \n");
-                    }
+//                    if (debug) {    //writing to shell
+//                        printf("Entered option for EOF, when not writing to shell \n");
+//                    }
                     char eofchars[2] = {'\r', '\n'};
                     secure_write(fd, eofchars, 2);
                 }
@@ -189,9 +195,6 @@ void secure_shell() {
 
 int process_poll() {
     int should_continue_loop = 1;
-    if (debug) {
-        printf("in process poll");
-    }
     int pollresult = poll(poll_file_d, NUM_FDS, 0);
     if (pollresult == -1) {
         print_error_and_exit("Error setting up poll", errno);
@@ -202,28 +205,19 @@ int process_poll() {
     }
     if (poll_file_d[0].revents & POLLIN) {
         //we can read from standard input
-        if (debug) {
-            printf("Reading from standard input");
-        }
         char buffer_stdin[BUFFER_SIZE];
-        ssize_t bytes_read = secure_read(STDIN_FILENO, buffer_stdin, BUFFER_SIZE);
+        ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
         write_many(STDOUT_FILENO, buffer_stdin, bytes_read, 0); //write out
         write_many(to_shell[1], buffer_stdin, bytes_read, 1); //send to shell
     }
     if (poll_file_d[1].revents & POLLIN) {
         //we can read from the shell
-        if (debug) {
-            printf("Reading from shell");
-        }
         char buffer_shell[BUFFER_SIZE];
         ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
         write_many(STDOUT_FILENO, buffer_shell, bytes_read, 0);
     }
     if (poll_file_d[1].revents & (POLLERR | POLLHUP)) {
         //shell shut down
-        if (debug) {
-            printf("Closing shell");
-        }
         int returnclose = close(to_shell[1]); //stop writing to shell
         if (returnclose == -1) {
             print_error_and_exit("Couldn't close writing to shell in POLLERR", errno);
@@ -231,6 +225,20 @@ int process_poll() {
         should_continue_loop = -1;
     }
     return should_continue_loop;
+}
+
+void signal_handler(int num_signal) {
+    if (debug) {
+        printf("In signal handler");
+    }
+    if (shell) {
+        if (num_signal == SIGPIPE) {
+            if (debug) {
+                printf("in sigpipe");
+            }
+            exit(FAIL_EXIT_CODE);
+        }
+    }
 }
 
 //MARK: - Main function!
@@ -269,6 +277,7 @@ int main(int argc, char **argv) {
         initialize_pipe(to_shell);
         initialize_pipe(to_terminal);
         secure_fork();
+        signal(SIGPIPE, signal_handler);
         if (child_id == 0) {
             if (debug) {
                 printf("in child process, processid: %d\n", getpid());
