@@ -320,14 +320,14 @@ int main(int argc, char **argv) {
             returnclose_parent = close(to_shell[0]); //don't need to read from terminal
             if (returnclose_parent == -1) {
                 print_error_and_exit("Couldn't close pipe to read from terminal in parent", errno);
-                poll_file_d[0].fd = STDIN_FILENO;
-                poll_file_d[0].events = POLLIN;
-                poll_file_d[1].fd = to_terminal[0];
-                poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
-                int should_continue = 1;
-                while (should_continue != -1) {
-                    should_continue = process_poll();
-                }
+            }
+            poll_file_d[0].fd = STDIN_FILENO;
+            poll_file_d[0].events = POLLIN;
+            poll_file_d[1].fd = to_terminal[0];
+            poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
+            int should_continue = 1;
+            while (should_continue != -1) {
+                should_continue = process_poll();
             }
         }
     } else {
