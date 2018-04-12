@@ -11,6 +11,10 @@
 #include <string.h>
 #include <poll.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#define BUFFER_SIZE 256
 
 struct termios default_terminal_state;
 struct termios program_terminal_state;
@@ -33,9 +37,7 @@ const nfds_t NUM_FDS = 2;
 
 //buffer with recommended size in the spec
 
-
-const int BUFFER_SIZE = 256;
-char buff[BUFFER_SIZE];
+static char buff[BUFFER_SIZE];
 
 //MARK: - print functions
 
@@ -119,7 +121,8 @@ ssize_t secure_write(int fd, void* buffer, size_t size) {
 }
 
 void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
-    for (size_t i = 0; i < size; i++) {
+  size_t i;  
+  for (i = 0; i < size; i++) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
             case 0x03:
@@ -184,7 +187,8 @@ void secure_fork() {
 }
 
 void secure_shell() {
-    int execreturn = execv("/bin/bash", NULL);
+    char *const argv[] = {"/bin/bash", NULL};
+    int execreturn = execv("/bin/bash", argv);
     if (execreturn == -1) {
         print_error_and_exit("Exec of bash failed", errno);
     }

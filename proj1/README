@@ -1,7 +1,6 @@
-Name: Ege Tanboga
-email: ege72282@gmail.com
-UID: 304735411
-
+NAME:Ege Tanboga
+EMAIL:ege72282@gmail.com
+UID:304735411
 
 Resources:
 
@@ -42,4 +41,4 @@ Includes commands to clean, make and tar the project. Clean gets rid of the exec
 
 Lab1a.c:
 
-This contains the source code for the project. The program is built incrementally with the steps specified in the spec. First, input and output is 
+This contains the source code for the project. The program is built incrementally with the steps specified in the spec. First, 
