@@ -132,6 +132,7 @@ void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
                     }
                     kill(child_id, SIGINT);
                 }
+		break;
             case 0x04: //for ^D
                    if (shell) {
                         int returnclose = close(to_shell[1]); //don't write to shell
@@ -240,9 +241,62 @@ void signal_handler(int num_signal) {
             if (debug) {
                 printf("in sigpipe");
             }
-            exit(FAIL_EXIT_CODE);
+            exit(SUCCESS_EXIT_CODE);
         }
     }
+}
+
+void pre_shell_setup() {
+    int returnclose_child = close(to_shell[1]); //don't need to write to shell
+    if (returnclose_child == -1) {
+        print_error_and_exit("Couldn't close pipe to write to shell in child", errno);
+    }
+    if (debug) {
+        printf("Closed pipe to write to terminal in child");
+    }
+    returnclose_child = close(to_terminal[0]); //don't need to read from shell
+    if (returnclose_child == -1) {
+        print_error_and_exit("Couldn't close pipe to read from shell in child", errno);
+    }
+    if (debug) {
+        printf("Closed pipe to read from shell in child");
+    }
+    int dupcheck;
+    dupcheck = dup2(to_shell[0], STDIN_FILENO); //read terminal and write to terminal
+    if (dupcheck == -1) {
+        print_error_and_exit("error duplicating input in child", errno);
+    }
+    dupcheck = dup2(to_terminal[1], STDOUT_FILENO);
+    if (dupcheck == -1) {
+        print_error_and_exit("error duplicating output in child", errno);
+    }
+    dupcheck = dup2(to_terminal[1], STDERR_FILENO);
+    if (dupcheck == -1) {
+        print_error_and_exit("Error duplicating standard error in child", errno);
+    }
+    returnclose_child = close(to_shell[0]);
+    if (returnclose_child == -1) {
+        print_error_and_exit("Couldn't close pipe to read terminal in child", errno);
+    }
+    returnclose_child = close(to_terminal[1]);
+    if (returnclose_child == -1) {
+        print_error_and_exit("Couldn't close pipe to write to terminal in child", errno);
+    }
+}
+
+void pre_parent_setup() {
+    int returnclose_parent = close(to_terminal[1]); //don't need to write to terminal
+    if (returnclose_parent == -1) {
+        print_error_and_exit("Couldn't close pipe to write to terminal in parent", errno);
+    }
+    returnclose_parent = close(to_shell[0]); //don't need to read from terminal
+    if (returnclose_parent == -1) {
+        print_error_and_exit("Couldn't close pipe to read from terminal in parent", errno);
+    }
+    poll_file_d[0].fd = STDIN_FILENO;
+    poll_file_d[0].events = POLLIN;
+    poll_file_d[1].fd = to_terminal[0];
+    poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
 }
 
 //MARK: - Main function!
@@ -282,62 +336,17 @@ int main(int argc, char **argv) {
         initialize_pipe(to_terminal);
         secure_fork();
         signal(SIGPIPE, signal_handler);
-        if (child_id == 0) {
+        if (child_id == 0) { //if in child process, then do the shell stuff
             if (debug) {
                 printf("in child process, processid: %d\n", getpid());
             }
-            int returnclose_child = close(to_shell[1]); //don't need to write to shell
-            if (returnclose_child == -1) {
-                print_error_and_exit("Couldn't close pipe to write to shell in child", errno);
-            }
-            if (debug) {
-                printf("Closed pipe to write to terminal in child");
-            }
-            returnclose_child = close(to_terminal[0]); //don't need to read from shell
-            if (returnclose_child == -1) {
-                print_error_and_exit("Couldn't close pipe to read from shell in child", errno);
-            }
-            if (debug) {
-                printf("Closed pipe to read from shell in child");
-            }
-            int dupcheck;
-            dupcheck = dup2(to_shell[0], STDIN_FILENO); //read terminal and write to terminal
-            if (dupcheck == -1) {
-                print_error_and_exit("error duplicating input in child", errno);
-            }
-            dupcheck = dup2(to_terminal[1], STDOUT_FILENO);
-            if (dupcheck == -1) {
-                print_error_and_exit("error duplicating output in child", errno);
-            }
-            dupcheck = dup2(to_terminal[1], STDERR_FILENO);
-            if (dupcheck == -1) {
-                print_error_and_exit("Error duplicating standard error in child", errno);
-            }
-            returnclose_child = close(to_shell[0]);
-            if (returnclose_child == -1) {
-                print_error_and_exit("Couldn't close pipe to read terminal in child", errno);
-            }
-            returnclose_child = close(to_terminal[1]);
-            if (returnclose_child == -1) {
-                print_error_and_exit("Couldn't close pipe to write to terminal in child", errno);
-            }
+            pre_shell_setup();
             secure_shell();
         } else {
             if (debug) {
                 printf("in parent process, processid: %d\n", getpid());
             }
-            int returnclose_parent = close(to_terminal[1]); //don't need to write to terminal
-            if (returnclose_parent == -1) {
-                print_error_and_exit("Couldn't close pipe to write to terminal in parent", errno);
-            }
-            returnclose_parent = close(to_shell[0]); //don't need to read from terminal
-            if (returnclose_parent == -1) {
-                print_error_and_exit("Couldn't close pipe to read from terminal in parent", errno);
-            }
-            poll_file_d[0].fd = STDIN_FILENO;
-            poll_file_d[0].events = POLLIN;
-            poll_file_d[1].fd = to_terminal[0];
-            poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
+            pre_parent_setup();
             int should_continue = 1;
             while (should_continue != -1) {
                 should_continue = process_poll();

@@ -31,10 +31,6 @@ Kill example:
 
 https://www.gnu.org/software/libc/manual/html_node/Kill-Example.html
 
-To get process (in this case shell) completion status:
-
-https://www.gnu.org/software/libc/manual/html_node/Process-Completion-Status.html
-
 README:
 
 Includes the main resources I have looked into throughout the development of the project as well as explanations of how I approached the problem.
