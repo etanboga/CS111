@@ -103,7 +103,6 @@ void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
                         printf("Exiting program using option ^D\n");
                     }
                 }
-                exit(SUCCESS_EXIT_CODE);
                 break;
             default:
                 secure_write(fd, current_char_ptr, 1);
@@ -215,8 +214,9 @@ int process_poll() {
                 printf("Error: problem when reading from client");
             }
             kill(child_id, SIGTERM);
-            should_continue_loop = -1;
             cleanup_shell();
+            should_continue_loop = -1;
+            return should_continue_loop;
         } else {
             write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
         }
@@ -226,8 +226,9 @@ int process_poll() {
         char buffer_shell[BUFFER_SIZE];
         ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
         if (bytes_read == 0) {
-            should_continue_loop = -1;
             cleanup_shell();
+            should_continue_loop = -1;
+            return should_continue_loop;
         } else {
             write_many(newsockfd, buffer_shell, bytes_read, 0); //send to socket
         }
@@ -241,15 +242,46 @@ int process_poll() {
         if (returnclose == -1) {
             print_error_and_exit("Couldn't close writing to shell in POLLERR", errno);
         }
-        should_continue_loop = -1;
         cleanup_shell();
+        should_continue_loop = -1;
+        return should_continue_loop;
     }
     return should_continue_loop;
+}
+
+void signal_handler(int num_signal) {
+    if (debug) {
+        printf("In signal handler");
+    }
+
+    if (num_signal == SIGPIPE) {
+        if (debug) {
+            printf("in sigpipe");
+        }
+        cleanup_shell();
+    }
+    exit(SUCCESS_EXIT_CODE);
+}
+
+void setup_signal_handlers() {
+    if (signal(SIGTERM, signal_handler)<0) {
+        print_error_and_exit("couldn't set up SIGTERM handler", errno);
+    }
+    if (signal(SIGPIPE, signal_handler)<0) {
+        print_error_and_exit("couldn't set up SIGPIPE handler", errno);
+    }
+    if (signal(SIGINT, signal_handler)<0) {
+        print_error_and_exit("couldn't set up SIGINT handler", errno);
+    }
+    if (debug) {
+        printf("successfully set up signal handlers");
+    }
 }
 
 //MARK: - Main function!
 
 int main(int argc, char **argv) {
+    setup_signal_handlers();
     struct sockaddr_in serv_addr, cli_addr;
     unsigned int clilen;
     int sockfd;

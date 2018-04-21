@@ -24,7 +24,9 @@ struct termios program_terminal_state;
 
 
 int debug = 0;
+int logflag = 0;
 int sockfd;
+int logfd;
 int port_number_flag = 0;
 int port_number = 0;
 struct pollfd poll_file_d[2];
@@ -105,14 +107,14 @@ ssize_t secure_write(int fd, void* buffer, size_t size) {
     return bytes_written;
 }
 
-void write_many(int fd, char* buffer, size_t size, int is_to_logfile) {
+void write_many(int fd, char* buffer, size_t size) {
     size_t i;
     for (i = 0; i < size; i++) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
             case 0x0D: //for \r -> Carriage return
             case 0x0A:
-                if (is_to_logfile) { //if writing to log file, write as newline
+                if (fd != STDOUT_FILENO) { //if writing to log file, write as newline
                     char newline[1];
                     newline[0] = '\n';
                     secure_write(fd,newline, 1);
@@ -145,18 +147,28 @@ int process_poll() {
         //we can read from standard input
         char buffer_stdin[BUFFER_SIZE];
         ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
-        write_many(STDOUT_FILENO, buffer_stdin, bytes_read, 0); //write out to stdout
+        write_many(STDOUT_FILENO, buffer_stdin, bytes_read); //write out to stdout
+        write_many(sockfd, buffer_stdin, bytes_read);
     }
     if (poll_file_d[1].revents & POLLIN) {
         //reading input from server
-        char buffer_shell[BUFFER_SIZE];
-        ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
+        char buffer_server[BUFFER_SIZE];
+        ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_server, BUFFER_SIZE);
         if (bytes_read == 0) {
             if (debug) {
-                printf("nothing read from server ??");
+                printf("nothing read from server in client side");
             }
+            int returnclose = close(sockfd);
+            if (returnclose == -1) {
+                print_error_and_exit("Error: couldn't close socket", errno);
+            }
+            exit(SUCCESS_EXIT_CODE);
+        } else {
+            if (debug) {
+                printf("received data from server");
+            }
+            write_many(STDOUT_FILENO, buffer_server, bytes_read);
         }
-        write_many(STDOUT_FILENO, buffer_shell, bytes_read, 0);
     }
     if (poll_file_d[1].revents & (POLLERR | POLLHUP)) {
         //server is going away
@@ -167,14 +179,14 @@ int process_poll() {
         if (returnclose == -1) {
             print_error_and_exit("Couldn't close writing to shell in POLLERR", errno);
         }
-        should_continue_loop = -1;
+        exit(SUCCESS_EXIT_CODE);
     }
     return should_continue_loop;
 }
 
 void pre_poll_setup() {
     poll_file_d[0].fd = STDIN_FILENO;
-    poll_file_d[0].events = POLLIN;
+    poll_file_d[0].events = POLLIN | POLLHUP | POLLERR;
     poll_file_d[1].fd = sockfd;
     poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
 }
@@ -187,15 +199,20 @@ int main(int argc, char **argv) {
     static struct option long_options[] = {
         {"port", required_argument, 0, 'p'},
         {"debug", no_argument, 0, 'd'},
+        {"log", optional_argument, 0, 'l'},
         {0, 0, 0, 0}
     };
+    char *logfile;
     int option;
-    while ((option = getopt_long(argc, argv, "p:d", long_options, NULL)) != -1 ) {
+    while ((option = getopt_long(argc, argv, "p:l:d", long_options, NULL)) != -1 ) {
         switch(option) {
             case 'p':
                 port_number_flag = 1;
                 port_number = atoi(optarg);
                 break;
+            case 'l':
+                logfile = optarg;
+                logflag = 1;
             case 'd':
                 debug = 1;
                 break;
