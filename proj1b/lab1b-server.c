@@ -18,6 +18,7 @@
 #include <zlib.h>
 
 #define BUFFER_SIZE 256
+#define COMPRESSION_BUFFER_SIZE 1024
 
 z_stream stdin_to_shell;
 z_stream shell_to_stdout;
@@ -61,6 +62,8 @@ void cleanup_shell() {
     } else if (debug) {
         printf("exiting shell properly in process id: %d \n", getpid());
     }
+    inflateEnd(&stdin_to_shell);
+    deflateEnd(&shell_to_stdout);
     fprintf(stderr, "SHELL EXIT SIGNAL=%d STATUS=%d\n", WTERMSIG(status), WEXITSTATUS(status));
 }
 
@@ -221,11 +224,24 @@ int process_poll() {
             return should_continue_loop;
         } else {
             if (compress_flag) {
-                if (debug) {
-                    printf("Need to decompress here");
-                }
-            }
+                char decompressed_buffer[COMPRESSION_BUFFER_SIZE];
+                stdin_to_shell.zalloc = NULL;
+                stdin_to_shell.zfree = NULL;
+                stdin_to_shell.opaque = NULL;
+                stdin_to_shell.avail_in = BUFFER_SIZE;
+                stdin_to_shell.next_in = (Bytef *) buffer_socket;
+                stdin_to_shell.avail_out = COMPRESSION_BUFFER_SIZE;
+                stdin_to_shell.next_out = (Bytef *) decompressed_buffer;
+                do {
+                    if (debug) {
+                        printf("Decompressing before sending over to shell");
+                    }
+                    inflate(&stdin_to_shell, Z_SYNC_FLUSH);
+                } while (stdin_to_shell.avail_in > 0);
+                write_many(to_shell[1], decompressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out, 1);
+            } else {
             write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
+            }
         }
     }
     if (poll_file_d[1].revents & POLLIN) {
@@ -238,7 +254,21 @@ int process_poll() {
             return should_continue_loop;
         } else {
             if (compress_flag) {
-                printf("need to compress here before sending");
+                char compressed_buffer[COMPRESSION_BUFFER_SIZE];
+                shell_to_stdout.zalloc = NULL;
+                shell_to_stdout.zfree = NULL;
+                shell_to_stdout.opaque = NULL;
+                shell_to_stdout.avail_in = BUFFER_SIZE;
+                shell_to_stdout.next_in = (Bytef *) buffer_shell;
+                shell_to_stdout.avail_out = COMPRESSION_BUFFER_SIZE;
+                shell_to_stdout.next_out = (Bytef *) compressed_buffer;
+                do {
+                    if (debug) {
+                        printf("Compressing before sending stuff to client");
+                    }
+                    deflate(&shell_to_stdout, Z_SYNC_FLUSH);
+                } while (shell_to_stdout.avail_in > 0);
+                write_many(newsockfd, compressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out, 0);
             }
             write_many(newsockfd, buffer_shell, bytes_read, 0); //send to socket
         }
@@ -322,7 +352,7 @@ int main(int argc, char **argv) {
         print_guidelines_and_exit(); //cannot run without a port
     }
     if (debug) {
-        printf("The following arguments are passed, port_number: %d, debug: %d\n", port_number, debug);
+        printf("The following arguments are passed, port_number: %d, compress-flag: %d, debug: %d\n", port_number, compress_flag, debug);
     }
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {

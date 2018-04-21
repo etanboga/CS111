@@ -77,6 +77,11 @@ void restore_terminal_state() {
     if (debug) {
         printf("restored terminal state properly for default behaviour");
     }
+    
+    //close compression related stuff before exit!
+    
+    inflateEnd(&shell_to_stdout);
+    deflateEnd(&stdin_to_shell);
 }
 
 void set_program_terminal_state() {
@@ -235,12 +240,35 @@ int process_poll() {
             }
             if (compress_flag) {
                 if (debug) {
-                    printf("Need to decompress here");
+                    printf("Decompressing input from the server");
                 }
-            }
-            write_many(STDOUT_FILENO, buffer_server, bytes_read);
-            if (logflag) {
-                log_transfer(buffer_server, bytes_read, DIR_CLIENT);
+                shell_to_stdout.zalloc = NULL;
+                shell_to_stdout.zfree = NULL;
+                shell_to_stdout.opaque = NULL;
+                char decompressed_buffer[COMPRESSION_BUFFER_SIZE];
+                int return_inf = inflateInit(&shell_to_stdout);
+                if (return_inf != Z_OK) {
+                    print_error_and_exit("Error: couldn't decompress input from server", errno);
+                }
+                shell_to_stdout.avail_in = BUFFER_SIZE;
+                shell_to_stdout.next_in = (Bytef *) buffer_server;
+                shell_to_stdout.avail_out = COMPRESSION_BUFFER_SIZE;
+                shell_to_stdout.next_out = (Bytef *) decompressed_buffer;
+                do {
+                    if (debug) {
+                        printf("Decompressing with inflate");
+                    }
+                    inflate(&shell_to_stdout, Z_SYNC_FLUSH);
+                } while (shell_to_stdout.avail_in > 0);
+                write_many(STDOUT_FILENO, decompressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out);
+                if (logflag) {
+                    log_transfer(decompressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out, DIR_CLIENT);
+                }
+            } else {
+                write_many(STDOUT_FILENO, buffer_server, bytes_read);
+                if (logflag) {
+                    log_transfer(buffer_server, bytes_read, DIR_CLIENT);
+                }
             }
         }
     }
