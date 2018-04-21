@@ -139,7 +139,7 @@ void write_many(int fd, char* buffer, size_t size) {
 void log_transfer(char* buffer, size_t size, int direction) {
     char newline = '\n';
     if (direction == DIR_CLIENT) {
-        int return_write = dprintf(logfd, "SENT %zu bytes: ", size);
+        int return_write = dprintf(logfd, "RECEIVED %zu bytes: ", size);
         if (return_write < 0) {
             print_error_and_exit("Error: couldn't write to log file while sending", errno);
         }
@@ -147,7 +147,7 @@ void log_transfer(char* buffer, size_t size, int direction) {
         secure_write(logfd, &newline, size);
     }
     if (direction == DIR_SERVER) {
-        int return_write = dprintf(logfd, "RECEIVED %zu bytes: ", size);
+        int return_write = dprintf(logfd, "SENT %zu bytes: ", size);
         if (return_write < 0) {
             print_error_and_exit("Error: couldn't write to log file while receiving", errno);
         }

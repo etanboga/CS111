@@ -264,13 +264,13 @@ void signal_handler(int num_signal) {
 }
 
 void setup_signal_handlers() {
-    if (signal(SIGTERM, signal_handler)<0) {
+    if (signal(SIGTERM, signal_handler) == SIG_ERR) {
         print_error_and_exit("couldn't set up SIGTERM handler", errno);
     }
-    if (signal(SIGPIPE, signal_handler)<0) {
+    if (signal(SIGPIPE, signal_handler) == SIG_ERR) {
         print_error_and_exit("couldn't set up SIGPIPE handler", errno);
     }
-    if (signal(SIGINT, signal_handler)<0) {
+    if (signal(SIGINT, signal_handler) == SIG_ERR) {
         print_error_and_exit("couldn't set up SIGINT handler", errno);
     }
     if (debug) {
