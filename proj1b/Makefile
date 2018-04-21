@@ -13,6 +13,6 @@ lab1b-server:
 lab1b-client:
 	gcc -g -Wall -Wextra lab1b-client.c -o lab1b-client
 clean:
-	rm -rf *.tar.gz *.o lab1b-server lab1b-client
+	rm -rf *.tar.gz *.o lab1b-server lab1b-client *.txt
 dist:
 	tar -zcvf lab1b-304735411.tar.gz lab1b-client.c lab1b-server.c Makefile README

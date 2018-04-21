@@ -42,8 +42,7 @@ struct pollfd poll_file_d[2];
 const int FAIL_EXIT_CODE = 1;
 const int SUCCESS_EXIT_CODE = 0;
 
-
-//MARK: - pri()nt functions
+//MARK: - print functions
 
 void print_error_and_exit(char* error_message, int error_no) {
     fprintf(stderr, "%s, error = %d, message = %s \n", error_message, error_no, strerror(error_no));
@@ -232,26 +231,27 @@ int main(int argc, char **argv) {
     struct sockaddr_in serv_addr;
     struct hostent *server;
     static struct option long_options[] = {
+        { "log", required_argument, 0, 'l'},
         {"port", required_argument, 0, 'p'},
-        {"log", optional_argument, 0, 'l'},
-        {"debug", no_argument, 0, 'd'},
         {"compress", no_argument, 0, 'c'},
+        {"debug", no_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
     char *logfile = NULL;
     int option;
-    while ((option = getopt_long(argc, argv, "p:l:cd", long_options, NULL)) != -1 ) {
+    while ((option = getopt_long(argc, argv, "l:p:cd", long_options, NULL)) != -1 ) {
         switch(option) {
+            case 'l':
+                logfile = optarg;
+                logflag = 1;
+                break;
             case 'p':
                 port_number_flag = 1;
                 port_number = atoi(optarg);
                 break;
-            case 'l':
-                logflag = 1;
-                logfile = optarg;
-                break;
             case 'c':
                 compress_flag = 1;
+                break;
             case 'd':
                 debug = 1;
                 break;
