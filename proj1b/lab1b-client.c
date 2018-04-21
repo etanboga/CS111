@@ -15,18 +15,22 @@
 #include <sys/wait.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 256
 #define NUM_FDS 2
+#define DIR_SERVER 1
+#define DIR_CLIENT 0
 
 struct termios default_terminal_state;
 struct termios program_terminal_state;
 
 
 int debug = 0;
-int logflag = 0;
 int sockfd;
 int logfd;
+int logflag = 0;
+int compress_flag = 0;
 int port_number_flag = 0;
 int port_number = 0;
 struct pollfd poll_file_d[2];
@@ -38,7 +42,8 @@ struct pollfd poll_file_d[2];
 const int FAIL_EXIT_CODE = 1;
 const int SUCCESS_EXIT_CODE = 0;
 
-//MARK: - print functions
+
+//MARK: - pri()nt functions
 
 void print_error_and_exit(char* error_message, int error_no) {
     fprintf(stderr, "%s, error = %d, message = %s \n", error_message, error_no, strerror(error_no));
@@ -46,7 +51,7 @@ void print_error_and_exit(char* error_message, int error_no) {
 }
 
 void print_guidelines_and_exit() {
-    printf("Usage: ./lab1b-server --port=portnumber --debug \n");
+    printf("Usage: ./lab1b-client --port=portnumber --log=logfile --debug \n");
     exit(FAIL_EXIT_CODE);
 }
 
@@ -130,6 +135,30 @@ void write_many(int fd, char* buffer, size_t size) {
     }
 }
 
+//MARK: - logging the transfers
+
+void log_transfer(char* buffer, size_t size, int direction) {
+    char newline = '\n';
+    if (direction == DIR_CLIENT) {
+        int return_write = dprintf(logfd, "SENT %zu bytes: ", size);
+        if (return_write < 0) {
+            print_error_and_exit("Error: couldn't write to log file while sending", errno);
+        }
+        write_many(logfd, buffer, size);
+        secure_write(logfd, &newline, size);
+    }
+    if (direction == DIR_SERVER) {
+        int return_write = dprintf(logfd, "RECEIVED %zu bytes: ", size);
+        if (return_write < 0) {
+            print_error_and_exit("Error: couldn't write to log file while receiving", errno);
+        }
+        write_many(logfd, buffer, size);
+        secure_write(logfd, &newline, size);
+    }
+}
+
+//MARK: - polling
+
 int process_poll() {
     int should_continue_loop = 1;
     int pollresult = poll(poll_file_d, NUM_FDS, 0);
@@ -148,6 +177,9 @@ int process_poll() {
         char buffer_stdin[BUFFER_SIZE];
         ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
         write_many(STDOUT_FILENO, buffer_stdin, bytes_read); //write out to stdout
+        if (logflag) {
+            log_transfer(buffer_stdin, bytes_read, DIR_SERVER);
+        }
         write_many(sockfd, buffer_stdin, bytes_read);
     }
     if (poll_file_d[1].revents & POLLIN) {
@@ -168,6 +200,9 @@ int process_poll() {
                 printf("received data from server");
             }
             write_many(STDOUT_FILENO, buffer_server, bytes_read);
+            if (logflag) {
+                log_transfer(buffer_server, bytes_read, DIR_CLIENT);
+            }
         }
     }
     if (poll_file_d[1].revents & (POLLERR | POLLHUP)) {
@@ -198,21 +233,25 @@ int main(int argc, char **argv) {
     struct hostent *server;
     static struct option long_options[] = {
         {"port", required_argument, 0, 'p'},
-        {"debug", no_argument, 0, 'd'},
         {"log", optional_argument, 0, 'l'},
+        {"debug", no_argument, 0, 'd'},
+        {"compress", no_argument, 0, 'c'},
         {0, 0, 0, 0}
     };
-    char *logfile;
+    char *logfile = NULL;
     int option;
-    while ((option = getopt_long(argc, argv, "p:l:d", long_options, NULL)) != -1 ) {
+    while ((option = getopt_long(argc, argv, "p:l:cd", long_options, NULL)) != -1 ) {
         switch(option) {
             case 'p':
                 port_number_flag = 1;
                 port_number = atoi(optarg);
                 break;
             case 'l':
-                logfile = optarg;
                 logflag = 1;
+                logfile = optarg;
+                break;
+            case 'c':
+                compress_flag = 1;
             case 'd':
                 debug = 1;
                 break;
@@ -221,7 +260,13 @@ int main(int argc, char **argv) {
         }
     }
     if (debug) {
-        printf("The following arguments are passed, port_number: %d, debug: %d\n", port_number, debug);
+        printf("The following arguments are passed, port_number: %d, debug: %d, logflag: %d, logfile: %s, compress flag: %d \n", port_number, debug, logflag, logfile, compress_flag);
+    }
+    if (logflag) {
+        logfd = open(logfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+        if (logfd == -1) {
+            print_error_and_exit("couldn't create log file", errno);
+        }
     }
     save_terminal_state();
     set_program_terminal_state();
