@@ -15,13 +15,15 @@
 #include <sys/wait.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <zlib.h>
 
 #define BUFFER_SIZE 256
 
-struct termios default_terminal_state;
-struct termios program_terminal_state;
+z_stream stdin_to_shell;
+z_stream shell_to_stdout;
 
 int debug = 0;
+int compress_flag = 0;
 int port_number_flag = 0;
 int port_number;
 int newsockfd;
@@ -218,6 +220,11 @@ int process_poll() {
             should_continue_loop = -1;
             return should_continue_loop;
         } else {
+            if (compress_flag) {
+                if (debug) {
+                    printf("Need to decompress here");
+                }
+            }
             write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
         }
     }
@@ -230,6 +237,9 @@ int process_poll() {
             should_continue_loop = -1;
             return should_continue_loop;
         } else {
+            if (compress_flag) {
+                printf("need to compress here before sending");
+            }
             write_many(newsockfd, buffer_shell, bytes_read, 0); //send to socket
         }
     }
@@ -288,14 +298,18 @@ int main(int argc, char **argv) {
     static struct option long_options[] = {
         {"port", required_argument, 0, 'p'},
         {"debug", no_argument, 0, 'd'},
+        {"compress", no_argument, 0, 'c'},
         {0, 0, 0, 0}
     };
     int option;
-    while ((option = getopt_long(argc, argv, "p:d", long_options, NULL)) != -1 ) {
+    while ((option = getopt_long(argc, argv, "p:cd", long_options, NULL)) != -1 ) {
         switch(option) {
             case 'p':
                 port_number = atoi(optarg);
                 port_number_flag = 1;
+                break;
+            case 'c':
+                compress_flag = 1;
                 break;
             case 'd':
                 debug = 1;

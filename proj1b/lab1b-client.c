@@ -16,14 +16,18 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <fcntl.h>
+#include <zlib.h>
 
 #define BUFFER_SIZE 256
 #define NUM_FDS 2
 #define DIR_SERVER 1
 #define DIR_CLIENT 0
+#define COMPRESSION_BUFFER_SIZE 1024
 
 struct termios default_terminal_state;
 struct termios program_terminal_state;
+z_stream stdin_to_shell;
+z_stream shell_to_stdout;
 
 
 int debug = 0;
@@ -176,10 +180,41 @@ int process_poll() {
         char buffer_stdin[BUFFER_SIZE];
         ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
         write_many(STDOUT_FILENO, buffer_stdin, bytes_read); //write out to stdout
-        if (logflag) {
-            log_transfer(buffer_stdin, bytes_read, DIR_SERVER);
+        if (compress_flag) {
+            if (debug) {
+                printf("in compress option");
+            }
+            stdin_to_shell.zalloc = Z_NULL;
+            stdin_to_shell.zfree = Z_NULL;
+            stdin_to_shell.opaque = Z_NULL;
+            char compressed_buffer[COMPRESSION_BUFFER_SIZE];
+            int return_def = deflateInit(&stdin_to_shell, Z_DEFAULT_COMPRESSION);
+            if (return_def != Z_OK) {
+                print_error_and_exit("Error: couldn't deflateInit", errno);
+            }
+            stdin_to_shell.avail_in = BUFFER_SIZE;
+            stdin_to_shell.next_in = (Bytef *) buffer_stdin;
+            stdin_to_shell.avail_out = COMPRESSION_BUFFER_SIZE;
+            stdin_to_shell.next_out = (Bytef *) compressed_buffer;
+            do {
+                if (debug) {
+                    printf("Compressing with deflate");
+                }
+                deflate(&stdin_to_shell, Z_SYNC_FLUSH);
+            } while (stdin_to_shell.avail_in > 0);
+            write_many(sockfd, compressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out);
+            if (logflag) {
+                log_transfer(compressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out, DIR_SERVER);
+            }
+        } else {
+            if (debug) {
+                printf("Without compress option");
+            }
+            if (logflag) {
+                log_transfer(buffer_stdin, bytes_read, DIR_SERVER);
+            }
+            write_many(sockfd, buffer_stdin, bytes_read);
         }
-        write_many(sockfd, buffer_stdin, bytes_read);
     }
     if (poll_file_d[1].revents & POLLIN) {
         //reading input from server
@@ -197,6 +232,11 @@ int process_poll() {
         } else {
             if (debug) {
                 printf("received data from server");
+            }
+            if (compress_flag) {
+                if (debug) {
+                    printf("Need to decompress here");
+                }
             }
             write_many(STDOUT_FILENO, buffer_server, bytes_read);
             if (logflag) {

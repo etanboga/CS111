@@ -4,7 +4,7 @@
 
 .SILENT:
 
-tarred_files= Makefile README lab1b-client.c lab1b-server.c
+tarred_files= Makefile README lab1b-client.c lab1b-server.c lab1b-304735411.tar.gz
 
 default: lab1b-server lab1b-client
 
@@ -15,4 +15,4 @@ lab1b-client:
 clean:
 	rm -rf *.tar.gz *.o lab1b-server lab1b-client *.txt
 dist:
-	tar -zcvf lab1b-304735411.tar.gz $(tarred_files)
+	tar -zcvf 
