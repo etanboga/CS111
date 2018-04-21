@@ -93,18 +93,18 @@ void write_many(int fd, char* buffer, size_t size, int is_to_shell) {
                     kill(child_id, SIGINT);
                 }
                 break;
-            case 0x04: //for ^D
-                if (is_to_shell) {
-                    int returnclose = close(to_shell[1]); //don't write to shell
-                    if (returnclose == -1) {
-                        print_error_and_exit("Couldn't close pipe to shell in ^D", errno);
-                    }
-                    if (debug) {
-                        printf("Exiting program using option ^D\n");
-                    }
-                }
-                exit(SUCCESS_EXIT_CODE);
-                break;
+//            case 0x04: //for ^D
+//                if (is_to_shell) {
+//                    int returnclose = close(to_shell[1]); //don't write to shell
+//                    if (returnclose == -1) {
+//                        print_error_and_exit("Couldn't close pipe to shell in ^D", errno);
+//                    }
+//                    if (debug) {
+//                        printf("Exiting program using option ^D\n");
+//                    }
+//                }
+//                exit(SUCCESS_EXIT_CODE);
+//                break;
             default:
                 secure_write(fd, current_char_ptr, 1);
         }
@@ -224,6 +224,7 @@ int process_poll() {
     if (poll_file_d[1].revents & POLLIN) {
         //we can read from the shell. communicate to client via newsockfd
         char buffer_shell[BUFFER_SIZE];
+        printf("reading from shell");
         ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
         if (bytes_read == 0) {
             should_continue_loop = -1;
@@ -237,7 +238,7 @@ int process_poll() {
         if (debug) {
             printf("Stop writing to shell");
         }
-        int returnclose = close(to_shell[1]); //stop writing to shell
+        int returnclose = close(poll_file_d[1].fd); //stop writing to shell
         if (returnclose == -1) {
             print_error_and_exit("Couldn't close writing to shell in POLLERR", errno);
         }

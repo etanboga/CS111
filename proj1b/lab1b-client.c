@@ -105,14 +105,14 @@ ssize_t secure_write(int fd, void* buffer, size_t size) {
     return bytes_written;
 }
 
-void write_many(int fd, char* buffer, size_t size, int is_to_logfile) {
+void write_many(int fd, char* buffer, size_t size, int is_not_to_stdout) {
     size_t i;
     for (i = 0; i < size; i++) {
         char* current_char_ptr  = (buffer+i);
         switch(*current_char_ptr) {
             case 0x0D: //for \r -> Carriage return
             case 0x0A:
-                if (is_to_logfile) { //if writing to log file, write as newline
+                if (is_not_to_stdout) { //if writing to log file or stdout, write newline
                     char newline[1];
                     newline[0] = '\n';
                     secure_write(fd,newline, 1);
@@ -126,6 +126,13 @@ void write_many(int fd, char* buffer, size_t size, int is_to_logfile) {
                 secure_write(fd, current_char_ptr, 1);
         }
     }
+}
+
+void pre_poll_setup() {
+    poll_file_d[0].fd = STDIN_FILENO;
+    poll_file_d[0].events = POLLIN;
+    poll_file_d[1].fd = sockfd;
+    poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
 }
 
 int process_poll() {
@@ -146,6 +153,7 @@ int process_poll() {
         char buffer_stdin[BUFFER_SIZE];
         ssize_t bytes_read = secure_read(poll_file_d[0].fd, buffer_stdin, BUFFER_SIZE);
         write_many(STDOUT_FILENO, buffer_stdin, bytes_read, 0); //write out to stdout
+        write_many(poll_file_d[1].fd, buffer_stdin, BUFFER_SIZE, 1);
     }
     if (poll_file_d[1].revents & POLLIN) {
         //reading input from server
@@ -153,7 +161,7 @@ int process_poll() {
         ssize_t bytes_read = secure_read(poll_file_d[1].fd, buffer_shell, BUFFER_SIZE);
         if (bytes_read == 0) {
             if (debug) {
-                printf("nothing read from server ??");
+                printf("nothing read from server, possible quit");
             }
         }
         write_many(STDOUT_FILENO, buffer_shell, bytes_read, 0);
@@ -170,13 +178,6 @@ int process_poll() {
         should_continue_loop = -1;
     }
     return should_continue_loop;
-}
-
-void pre_poll_setup() {
-    poll_file_d[0].fd = STDIN_FILENO;
-    poll_file_d[0].events = POLLIN;
-    poll_file_d[1].fd = sockfd;
-    poll_file_d[1].events = POLLIN | POLLHUP | POLLERR;
 }
 
 //MARK: - Main function!
