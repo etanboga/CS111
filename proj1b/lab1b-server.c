@@ -15,13 +15,10 @@
 #include <sys/wait.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <zlib.h>
+#include "zlib.h"
 
 #define BUFFER_SIZE 256
 #define CHUNK 16384
-
-z_stream stdin_to_shell;
-z_stream shell_to_stdout;
 
 int debug = 0;
 int compress_flag = 0;
@@ -41,7 +38,74 @@ const int SUCCESS_EXIT_CODE = 0;
 const nfds_t NUM_FDS = 2;
 
 
+//MARK: - compress / decompress functions
 
+int compress_Ege(void* from, void* to, int from_size, int to_size, int level) {
+    z_stream strm;
+    int return_def;
+    int bytes_compressed = -1;
+    strm.total_in = strm.avail_in = from_size;
+    strm.total_out = strm.avail_out = to_size;
+    strm.next_in = (Bytef *) from;
+    strm.next_out = (Bytef *) to;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    return_def = deflateInit(&strm, level);
+    if (return_def != Z_OK) {
+        deflateEnd(&strm);
+        return bytes_compressed;
+    } else {
+        return_def = deflate(&strm, Z_FINISH);
+        if (return_def == Z_STREAM_END) {
+            bytes_compressed = (int) strm.total_out;
+        } else {
+            deflateEnd(&strm);
+            return bytes_compressed;
+        }
+    }
+    deflateEnd(&strm);
+    return bytes_compressed;
+}
+
+int decompress_Ege(void* from, void* to, int from_size, int to_size) {
+    z_stream strm;
+    int return_inf;
+    int bytes_decompressed = -1;
+    strm.total_in = strm.avail_in = from_size;
+    strm.total_out = strm.avail_out = to_size;
+    strm.next_in = (Bytef *) from;
+    strm.next_out = (Bytef *) to;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    return_inf = inflateInit(&strm);
+    if (return_inf != Z_OK) {
+        inflateEnd(&strm);
+        if (debug) {
+            printf("Error: couldn't initialize inflate");
+        }
+        return bytes_decompressed;
+    } else {
+        return_inf = inflate(&strm, Z_FINISH);
+        if (return_inf == Z_STREAM_END) {
+            bytes_decompressed = (int) strm.total_out;
+        } else {
+            if (debug) {
+                printf("Error: inflate doesn't return Z_FINISH\n");
+            }
+            if (return_inf == Z_DATA_ERROR) {
+                if (debug) {
+                    printf("experienced Z_DATA_ERROR\n");
+                }
+            }
+            inflateEnd(&strm);
+            return bytes_decompressed;
+        }
+    }
+    inflateEnd(&strm);
+    return bytes_decompressed;
+}
 
 //MARK: - print functions
 
@@ -63,8 +127,6 @@ void cleanup_shell() {
     } else if (debug) {
         printf("exiting shell properly in process id: %d \n", getpid());
     }
-    inflateEnd(&stdin_to_shell);
-    deflateEnd(&shell_to_stdout);
     fprintf(stderr, "SHELL EXIT SIGNAL=%d STATUS=%d\n", WTERMSIG(status), WEXITSTATUS(status));
 }
 
@@ -229,10 +291,14 @@ int process_poll() {
                 if (debug) {
                     printf("Decompressing before writing input to shell");
                 }
-            } else {
-                if (debug) {
-                    write_many(STDOUT_FILENO, buffer_socket, bytes_read, 1);
+                char decompressed_buffer[CHUNK];
+                
+                int bytes_decompressed = decompress_Ege(buffer_socket, decompressed_buffer, BUFFER_SIZE, CHUNK);
+                if (bytes_decompressed == -1) {
+                    print_error_and_exit("Error: couldn't decompress from client before writing to shell", errno);
                 }
+                write_many(to_shell[1], decompressed_buffer, bytes_decompressed, 1);
+            } else {
                 write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
             }
         }
@@ -250,6 +316,12 @@ int process_poll() {
                 if (debug) {
                     printf("Compressing input from shell before sending it off to client");
                 }
+                char compressed_buffer[CHUNK];
+                int bytes_compressed = compress_Ege(buffer_shell, compressed_buffer, BUFFER_SIZE, CHUNK, Z_DEFAULT_COMPRESSION);
+                if (bytes_compressed == -1) {
+                    print_error_and_exit("Error: couldn't compress from shell before sending over to client", errno);
+                }
+                write_many(newsockfd, compressed_buffer, bytes_compressed, 0);
             } else {
             write_many(newsockfd, buffer_shell, bytes_read, 0); //send to socket
             }

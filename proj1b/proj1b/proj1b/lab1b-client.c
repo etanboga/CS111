@@ -16,7 +16,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <fcntl.h>
-#include <zlib.h>
+#include "zlib.h"
 
 #define BUFFER_SIZE 256
 #define NUM_FDS 2
@@ -56,6 +56,66 @@ void print_error_and_exit(char* error_message, int error_no) {
 void print_guidelines_and_exit() {
     printf("Usage: ./lab1b-client --port=portnumber --log=logfile --debug \n");
     exit(FAIL_EXIT_CODE);
+}
+
+//MARK: - compression and decompression files
+
+//copies from buffer to another buffer while doing compression
+
+int compress_Ege(void* from, void* to, int from_size, int to_size, int level) {
+    z_stream strm;
+    int return_def;
+    int bytes_compressed = -1;
+    strm.total_in = strm.avail_in = from_size;
+    strm.total_out = strm.avail_out = to_size;
+    strm.next_in = (Bytef *) from;
+    strm.next_out = (Bytef *) to;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    return_def = deflateInit(&strm, level);
+    if (return_def != Z_OK) {
+        deflateEnd(&strm);
+        return bytes_compressed;
+    } else {
+        return_def = deflate(&strm, Z_FINISH);
+        if (return_def == Z_STREAM_END) {
+            bytes_compressed = (int) strm.total_out;
+        } else {
+            deflateEnd(&strm);
+            return bytes_compressed;
+        }
+    }
+    deflateEnd(&strm);
+    return bytes_compressed;
+}
+
+int decompress_Ege(void* from, void* to, int from_size, int to_size) {
+    z_stream strm;
+    int return_inf;
+    int bytes_decompressed = -1;
+    strm.total_in = strm.avail_in = from_size;
+    strm.total_out = strm.avail_out = to_size;
+    strm.next_in = (Bytef *) from;
+    strm.next_out = (Bytef *) to;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    return_inf = inflateInit(&strm);
+    if (return_inf != Z_OK) {
+        inflateEnd(&strm);
+        return bytes_decompressed;
+    } else {
+        return_inf = inflate(&strm, Z_FINISH);
+        if (return_inf == Z_STREAM_END) {
+            bytes_decompressed = (int) strm.total_out;
+        } else {
+            inflateEnd(&strm);
+            return bytes_decompressed;
+        }
+    }
+    inflateEnd(&strm);
+    return bytes_decompressed;
 }
 
 //MARK: - terminal functions
@@ -189,6 +249,15 @@ int process_poll() {
             if (debug) {
                 printf("Compressing from stdin before sending over to server");
             }
+            char compressed_buffer[CHUNK];
+            int bytes_compressed = compress_Ege(buffer_stdin, compressed_buffer, BUFFER_SIZE, CHUNK, Z_DEFAULT_COMPRESSION);
+            if (bytes_compressed == -1) {
+                print_error_and_exit("Error: couldn't compress bytes before sending to server", errno);
+            }
+            if (logflag) {
+                log_transfer(compressed_buffer, bytes_compressed, DIR_SERVER);
+            }
+            write_many(sockfd, compressed_buffer, bytes_compressed);
         } else {
             if (debug) {
                 printf("Without compress option");
@@ -220,6 +289,15 @@ int process_poll() {
                 if (debug) {
                     printf("Decompressing input from the server");
                 }
+                char decompressed_buffer[CHUNK];
+                int bytes_decompressed = decompress_Ege(buffer_server, decompressed_buffer, BUFFER_SIZE, CHUNK);
+                if (bytes_decompressed == -1) {
+                    print_error_and_exit("Error: couldn't decompress bytes after receiving it from server", errno);
+                }
+                if (logflag) {
+                    log_transfer(decompressed_buffer, bytes_decompressed, DIR_CLIENT);
+                }
+                write_many(STDOUT_FILENO, buffer_server, bytes_decompressed);
             } else {
                 write_many(STDOUT_FILENO, buffer_server, bytes_read);
                 if (logflag) {
