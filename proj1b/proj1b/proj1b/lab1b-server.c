@@ -18,7 +18,7 @@
 #include <zlib.h>
 
 #define BUFFER_SIZE 256
-#define COMPRESSION_BUFFER_SIZE 1024
+#define CHUNK 16384
 
 z_stream stdin_to_shell;
 z_stream shell_to_stdout;
@@ -39,6 +39,7 @@ struct pollfd poll_file_d[2];
 const int FAIL_EXIT_CODE = 1;
 const int SUCCESS_EXIT_CODE = 0;
 const nfds_t NUM_FDS = 2;
+
 
 
 
@@ -214,6 +215,7 @@ int process_poll() {
         //we have input coming from newsockfd, write to shell
         char buffer_socket[BUFFER_SIZE];
         ssize_t bytes_read = read(newsockfd, buffer_socket, BUFFER_SIZE);
+        
         if (bytes_read <= 0) {
             if (debug) {
                 printf("Error: problem when reading from client");
@@ -224,34 +226,14 @@ int process_poll() {
             return should_continue_loop;
         } else {
             if (compress_flag) {
-                char decompressed_buffer[COMPRESSION_BUFFER_SIZE];
-                stdin_to_shell.zalloc = NULL;
-                stdin_to_shell.zfree = NULL;
-                stdin_to_shell.opaque = NULL;
-                int return_inf = inflateInit(&stdin_to_shell);
-                if (return_inf != Z_OK) {
-                    print_error_and_exit("Error: couldn't decompress input from server", errno);
-                }
-                stdin_to_shell.avail_in = (uInt) bytes_read;
-                stdin_to_shell.next_in = (Bytef *) buffer_socket;
-                stdin_to_shell.avail_out = COMPRESSION_BUFFER_SIZE;
-                stdin_to_shell.next_out = (Bytef *) decompressed_buffer;
                 if (debug) {
-                    printf("bytes received: %d \n", stdin_to_shell.avail_in);
+                    printf("Decompressing before writing input to shell");
                 }
-                do {
-                    if (debug) {
-                        //printf("Decompressing before sending over to shell");
-                        printf("%u", stdin_to_shell.avail_in);
-                    }
-                    inflate(&stdin_to_shell, Z_SYNC_FLUSH);
-                } while (stdin_to_shell.avail_in > 0);
-                
-                inflateEnd(&stdin_to_shell);
-                
-                write_many(to_shell[1], decompressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out, 1);
             } else {
-            write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
+                if (debug) {
+                    write_many(STDOUT_FILENO, buffer_socket, bytes_read, 1);
+                }
+                write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
             }
         }
     }
@@ -265,28 +247,9 @@ int process_poll() {
             return should_continue_loop;
         } else {
             if (compress_flag) {
-                char compressed_buffer[COMPRESSION_BUFFER_SIZE];
-                shell_to_stdout.zalloc = NULL;
-                shell_to_stdout.zfree = NULL;
-                shell_to_stdout.opaque = NULL;
-                int return_def = deflateInit(&shell_to_stdout, Z_DEFAULT_COMPRESSION);
-                if (return_def != Z_OK) {
-                    print_error_and_exit("Error: couldn't deflateInit", errno);
+                if (debug) {
+                    printf("Compressing input from shell before sending it off to client");
                 }
-                shell_to_stdout.avail_in = (uInt) bytes_read;
-                shell_to_stdout.next_in = (Bytef *) buffer_shell;
-                shell_to_stdout.avail_out = COMPRESSION_BUFFER_SIZE;
-                shell_to_stdout.next_out = (Bytef *) compressed_buffer;
-                do {
-                    if (debug) {
-                        printf("Compressing before sending stuff to client");
-                    }
-                    deflate(&shell_to_stdout, Z_SYNC_FLUSH);
-                } while (shell_to_stdout.avail_in > 0);
-                
-                deflateEnd(&shell_to_stdout);
-                
-                write_many(newsockfd, compressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out, 0);
             } else {
             write_many(newsockfd, buffer_shell, bytes_read, 0); //send to socket
             }

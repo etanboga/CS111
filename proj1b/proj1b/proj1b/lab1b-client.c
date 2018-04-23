@@ -22,7 +22,7 @@
 #define NUM_FDS 2
 #define DIR_SERVER 1
 #define DIR_CLIENT 0
-#define COMPRESSION_BUFFER_SIZE 1024
+#define CHUNK 16384
 
 struct termios default_terminal_state;
 struct termios program_terminal_state;
@@ -187,30 +187,7 @@ int process_poll() {
         write_many(STDOUT_FILENO, buffer_stdin, bytes_read); //write out to stdout
         if (compress_flag) {
             if (debug) {
-                printf("in compress option");
-            }
-            stdin_to_shell.zalloc = Z_NULL;
-            stdin_to_shell.zfree = Z_NULL;
-            stdin_to_shell.opaque = Z_NULL;
-            char compressed_buffer[COMPRESSION_BUFFER_SIZE];
-            int return_def = deflateInit(&stdin_to_shell, Z_DEFAULT_COMPRESSION);
-            if (return_def != Z_OK) {
-                print_error_and_exit("Error: couldn't deflateInit", errno);
-            }
-            stdin_to_shell.avail_in = (uInt) bytes_read;
-            stdin_to_shell.next_in = (Bytef *) buffer_stdin;
-            stdin_to_shell.avail_out = COMPRESSION_BUFFER_SIZE;
-            stdin_to_shell.next_out = (Bytef *) compressed_buffer;
-            do {
-                if (debug) {
-                    printf("Compressing with deflate");
-                }
-                deflate(&stdin_to_shell, Z_SYNC_FLUSH);
-            } while (stdin_to_shell.avail_in > 0);
-            deflateEnd(&stdin_to_shell);
-            write_many(sockfd, compressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out);
-            if (logflag) {
-                log_transfer(compressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out, DIR_SERVER);
+                printf("Compressing from stdin before sending over to server");
             }
         } else {
             if (debug) {
@@ -242,30 +219,6 @@ int process_poll() {
             if (compress_flag) {
                 if (debug) {
                     printf("Decompressing input from the server");
-                }
-                shell_to_stdout.zalloc = NULL;
-                shell_to_stdout.zfree = NULL;
-                shell_to_stdout.opaque = NULL;
-                char decompressed_buffer[COMPRESSION_BUFFER_SIZE];
-                int return_inf = inflateInit(&shell_to_stdout);
-                if (return_inf != Z_OK) {
-                    print_error_and_exit("Error: couldn't decompress input from server", errno);
-                }
-                shell_to_stdout.avail_in = (uInt) bytes_read;
-                shell_to_stdout.next_in = (Bytef *) buffer_server;
-                shell_to_stdout.avail_out = COMPRESSION_BUFFER_SIZE;
-                shell_to_stdout.next_out = (Bytef *) decompressed_buffer;
-                do {
-                    if (debug) {
-                        printf("%u", shell_to_stdout.avail_in);
-                    }
-                    inflate(&shell_to_stdout, Z_SYNC_FLUSH);
-                } while (shell_to_stdout.avail_in > 0);
-                
-                inflateEnd(&shell_to_stdout);
-                write_many(STDOUT_FILENO, decompressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out);
-                if (logflag) {
-                    log_transfer(decompressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out, DIR_CLIENT);
                 }
             } else {
                 write_many(STDOUT_FILENO, buffer_server, bytes_read);
