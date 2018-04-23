@@ -228,16 +228,27 @@ int process_poll() {
                 stdin_to_shell.zalloc = NULL;
                 stdin_to_shell.zfree = NULL;
                 stdin_to_shell.opaque = NULL;
-                stdin_to_shell.avail_in = BUFFER_SIZE;
+                int return_inf = inflateInit(&stdin_to_shell);
+                if (return_inf != Z_OK) {
+                    print_error_and_exit("Error: couldn't decompress input from server", errno);
+                }
+                stdin_to_shell.avail_in = (uInt) bytes_read;
                 stdin_to_shell.next_in = (Bytef *) buffer_socket;
                 stdin_to_shell.avail_out = COMPRESSION_BUFFER_SIZE;
                 stdin_to_shell.next_out = (Bytef *) decompressed_buffer;
+                if (debug) {
+                    printf("bytes received: %d \n", stdin_to_shell.avail_in);
+                }
                 do {
                     if (debug) {
-                        printf("Decompressing before sending over to shell");
+                        //printf("Decompressing before sending over to shell");
+                        printf("%u", stdin_to_shell.avail_in);
                     }
                     inflate(&stdin_to_shell, Z_SYNC_FLUSH);
                 } while (stdin_to_shell.avail_in > 0);
+                
+                inflateEnd(&stdin_to_shell);
+                
                 write_many(to_shell[1], decompressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out, 1);
             } else {
             write_many(to_shell[1], buffer_socket, bytes_read, 1); //send to shell
@@ -258,7 +269,11 @@ int process_poll() {
                 shell_to_stdout.zalloc = NULL;
                 shell_to_stdout.zfree = NULL;
                 shell_to_stdout.opaque = NULL;
-                shell_to_stdout.avail_in = BUFFER_SIZE;
+                int return_def = deflateInit(&shell_to_stdout, Z_DEFAULT_COMPRESSION);
+                if (return_def != Z_OK) {
+                    print_error_and_exit("Error: couldn't deflateInit", errno);
+                }
+                shell_to_stdout.avail_in = (uInt) bytes_read;
                 shell_to_stdout.next_in = (Bytef *) buffer_shell;
                 shell_to_stdout.avail_out = COMPRESSION_BUFFER_SIZE;
                 shell_to_stdout.next_out = (Bytef *) compressed_buffer;
@@ -268,9 +283,13 @@ int process_poll() {
                     }
                     deflate(&shell_to_stdout, Z_SYNC_FLUSH);
                 } while (shell_to_stdout.avail_in > 0);
+                
+                deflateEnd(&shell_to_stdout);
+                
                 write_many(newsockfd, compressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out, 0);
-            }
+            } else {
             write_many(newsockfd, buffer_shell, bytes_read, 0); //send to socket
+            }
         }
     }
     if (poll_file_d[1].revents & (POLLERR | POLLHUP)) {

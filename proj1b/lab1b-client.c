@@ -197,7 +197,7 @@ int process_poll() {
             if (return_def != Z_OK) {
                 print_error_and_exit("Error: couldn't deflateInit", errno);
             }
-            stdin_to_shell.avail_in = BUFFER_SIZE;
+            stdin_to_shell.avail_in = (uInt) bytes_read;
             stdin_to_shell.next_in = (Bytef *) buffer_stdin;
             stdin_to_shell.avail_out = COMPRESSION_BUFFER_SIZE;
             stdin_to_shell.next_out = (Bytef *) compressed_buffer;
@@ -207,6 +207,7 @@ int process_poll() {
                 }
                 deflate(&stdin_to_shell, Z_SYNC_FLUSH);
             } while (stdin_to_shell.avail_in > 0);
+            deflateEnd(&stdin_to_shell);
             write_many(sockfd, compressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out);
             if (logflag) {
                 log_transfer(compressed_buffer, COMPRESSION_BUFFER_SIZE - stdin_to_shell.avail_out, DIR_SERVER);
@@ -250,16 +251,18 @@ int process_poll() {
                 if (return_inf != Z_OK) {
                     print_error_and_exit("Error: couldn't decompress input from server", errno);
                 }
-                shell_to_stdout.avail_in = BUFFER_SIZE;
+                shell_to_stdout.avail_in = (uInt) bytes_read;
                 shell_to_stdout.next_in = (Bytef *) buffer_server;
                 shell_to_stdout.avail_out = COMPRESSION_BUFFER_SIZE;
                 shell_to_stdout.next_out = (Bytef *) decompressed_buffer;
                 do {
                     if (debug) {
-                        printf("Decompressing with inflate");
+                        printf("%u", shell_to_stdout.avail_in);
                     }
                     inflate(&shell_to_stdout, Z_SYNC_FLUSH);
                 } while (shell_to_stdout.avail_in > 0);
+                
+                inflateEnd(&shell_to_stdout);
                 write_many(STDOUT_FILENO, decompressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out);
                 if (logflag) {
                     log_transfer(decompressed_buffer, COMPRESSION_BUFFER_SIZE - shell_to_stdout.avail_out, DIR_CLIENT);
