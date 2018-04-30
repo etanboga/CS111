@@ -1,0 +1,22 @@
+NAME: Ege Tanboga
+EMAIL: ege72282@gmail.com
+UID: 304735411
+
+The compression code is inspired from the free tutorial with the z.pipe.c code. Here are the resources:
+
+https://zlib.net/zlib_how.html
+https://zlib.net/zpipe.c
+
+For client:
+https://www.tutorialspoint.com/unix_sockets/socket_client_example.htm
+
+For server:
+https://www.tutorialspoint.com/unix_sockets/socket_server_example.htm
+
+README: contains resources used for the project as well as explanations for the files in the tarsal
+
+Makefile: generic commands used for previous submissions. Had to use -lz flag while building the executable to include the zlib library and its functionality
+
+lab1b-client.c: client part of the code. Connects to a specified port if the server is active and creates log file if the flag is specified. The compress option so far compressed the input before sending it over, however there are still problems with the decompression (as of 04/23 10:39 AM). The conversion for newlines and return characters are made here, before sending the input into the server, rather than handling it all in the server side
+
+lab1b-server.c: server portion of the code. The check for ^D and ^C is made here, but the input is converted as required for shell before arriving to the server. Hence there is no check for that. The connection code is inspired from the tutorial specified above, for the server side. Currently there is a problem with decompressing the input sent from the client, inflate returns Z_DATA ERROR (as of 04/23 10:45 AM)

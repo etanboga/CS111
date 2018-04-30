@@ -44,8 +44,8 @@ int compress_Ege(void* from, void* to, int from_size, int to_size, int level) {
     z_stream strm;
     int return_def;
     int bytes_compressed = -1;
-    strm.total_in = strm.avail_in = from_size;
-    strm.total_out = strm.avail_out = to_size;
+    strm.avail_in = from_size;
+    strm.avail_out = to_size;
     strm.next_in = (Bytef *) from;
     strm.next_out = (Bytef *) to;
     strm.zalloc = Z_NULL;
@@ -56,13 +56,17 @@ int compress_Ege(void* from, void* to, int from_size, int to_size, int level) {
         deflateEnd(&strm);
         return bytes_compressed;
     } else {
-        return_def = deflate(&strm, Z_FINISH);
-        if (return_def == Z_STREAM_END) {
-            bytes_compressed = (int) strm.total_out;
-        } else {
-            deflateEnd(&strm);
-            return bytes_compressed;
-        }
+//        return_def = deflate(&strm, Z_FINISH);
+//        if (return_def == Z_STREAM_END) {
+//            bytes_compressed = (int) strm.total_out;
+//        } else {
+//            deflateEnd(&strm);
+//            return bytes_compressed;
+//        }
+        do {
+            deflate(&strm, Z_SYNC_FLUSH);
+        } while (strm.avail_in > 0);
+        bytes_compressed = to_size - strm.avail_out;
     }
     deflateEnd(&strm);
     return bytes_compressed;
@@ -72,8 +76,8 @@ int decompress_Ege(void* from, void* to, int from_size, int to_size) {
     z_stream strm;
     int return_inf;
     int bytes_decompressed = -1;
-    strm.total_in = strm.avail_in = from_size;
-    strm.total_out = strm.avail_out = to_size;
+    strm.avail_in = from_size;
+    strm.avail_out = to_size;
     strm.next_in = (Bytef *) from;
     strm.next_out = (Bytef *) to;
     strm.zalloc = Z_NULL;
@@ -87,21 +91,28 @@ int decompress_Ege(void* from, void* to, int from_size, int to_size) {
         }
         return bytes_decompressed;
     } else {
-        return_inf = inflate(&strm, Z_FINISH);
-        if (return_inf == Z_STREAM_END) {
-            bytes_decompressed = (int) strm.total_out;
-        } else {
+//        return_inf = inflate(&strm, Z_FINISH);
+//        if (return_inf == Z_STREAM_END) {
+//            bytes_decompressed = (int) strm.total_out;
+//        } else {
+//            if (debug) {
+//                printf("Error: inflate doesn't return Z_FINISH");
+//            }
+//            if (return_inf == Z_DATA_ERROR) {
+//                if (debug) {
+//                    printf("experienced Z_DATA_ERROR\n");
+//                }
+//            }
+//            inflateEnd(&strm);
+//            return bytes_decompressed;
+//        }
+        do {
             if (debug) {
-                printf("Error: inflate doesn't return Z_FINISH\n");
+                printf("%d", strm.avail_in);
             }
-            if (return_inf == Z_DATA_ERROR) {
-                if (debug) {
-                    printf("experienced Z_DATA_ERROR\n");
-                }
-            }
-            inflateEnd(&strm);
-            return bytes_decompressed;
-        }
+            inflate(&strm, Z_SYNC_FLUSH);
+        } while (strm.avail_in > 0);
+        bytes_decompressed = to_size - strm.avail_out;
     }
     inflateEnd(&strm);
     return bytes_decompressed;
@@ -291,9 +302,10 @@ int process_poll() {
                 if (debug) {
                     printf("Decompressing before writing input to shell");
                 }
-                char decompressed_buffer[CHUNK];
+                char decompressed_buffer[bytes_read];
+                int bytes_decompressed = decompress_Ege(buffer_socket, decompressed_buffer, (int) bytes_read, (int) bytes_read);
+                printf("Decompressed bytes: %d", bytes_decompressed);
                 
-                int bytes_decompressed = decompress_Ege(buffer_socket, decompressed_buffer, BUFFER_SIZE, CHUNK);
                 if (bytes_decompressed == -1) {
                     print_error_and_exit("Error: couldn't decompress from client before writing to shell", errno);
                 }
@@ -316,8 +328,8 @@ int process_poll() {
                 if (debug) {
                     printf("Compressing input from shell before sending it off to client");
                 }
-                char compressed_buffer[CHUNK];
-                int bytes_compressed = compress_Ege(buffer_shell, compressed_buffer, BUFFER_SIZE, CHUNK, Z_DEFAULT_COMPRESSION);
+                char compressed_buffer[bytes_read];
+                int bytes_compressed = compress_Ege(buffer_shell, compressed_buffer, (int) bytes_read, bytes_read, Z_DEFAULT_COMPRESSION);
                 if (bytes_compressed == -1) {
                     print_error_and_exit("Error: couldn't compress from shell before sending over to client", errno);
                 }
