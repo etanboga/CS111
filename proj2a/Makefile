@@ -1,0 +1,16 @@
+#NAME: Ege Tanboga
+#EMAIL: ege72282@gmail.com
+#ID: 304735411
+
+.SILENT:
+
+default: build
+
+build:
+	gcc -pthread -g -Wall -Wextra lab2_add.c -o lab2_add
+graphs:
+	gnuplot lab2.add.gp
+clean:
+	rm -rf *.png *.csv lab2_add *.o lab2_list
+dist: graphs
+	tar -zcvf lab2a-304735411.tar.gz *.h *.c README Makefile *.png *.csv *.gp 
