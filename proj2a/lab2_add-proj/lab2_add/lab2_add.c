@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <getopt.h>
+#include <assert.h>
 
 //a function pointer to see which function we should use
 
@@ -17,7 +18,20 @@ void (*current_function) (long long*, long long);
 long long num_iterations = 1;
 int opt_yield = 0;
 
+pthread_mutex_t lock_mutex = PTHREAD_MUTEX_INITIALIZER;
+int lock_spin = 0;
 
+//wrappers for mutex_lock
+
+void Pthread_mutex_lock(pthread_mutex_t *lock) {
+    int ret = pthread_mutex_lock(lock);
+    assert(ret == 0);
+}
+
+void Pthread_mutex_unlock(pthread_mutex_t *lock) {
+    int ret = pthread_mutex_unlock(lock);
+    assert(ret == 0);
+}
 
 void add(long long *pointer, long long value) {
     long long sum = *pointer + value;
@@ -27,18 +41,29 @@ void add(long long *pointer, long long value) {
 }
 
 void add_mutex(long long *pointer, long long value) {
-    long long sum = *pointer + value;
-    *pointer = sum;
+    Pthread_mutex_lock(&lock_mutex);
+    add(pointer, value);
+    Pthread_mutex_unlock(&lock_mutex);
 }
 
 void add_spin(long long *pointer, long long value) {
-    long long sum = *pointer + value;
-    *pointer = sum;
+    while(__sync_lock_test_and_set(&lock_spin, 1) == 1) {
+        ;
+    }
+    add(pointer, value);
+    __sync_lock_release(&lock_spin);
 }
 
 void add_sync(long long *pointer, long long value) {
-    long long sum = *pointer + value;
-    *pointer = sum;
+    long long expected;
+    long long sum;
+    do {
+        sum  = *pointer + value;
+        expected = *pointer;
+        if (opt_yield) {
+            sched_yield();
+        }
+    } while ( expected != __sync_val_compare_and_swap(pointer, expected, sum));
 }
 
 void* thread_compute(void* counter) {
@@ -114,6 +139,7 @@ int main(int argc, char **argv) {
         
         }
     }
+    
     if (debug) {
         //check if arguments passed properly
         printf("Passed in arguments are: num_threads: %d, num_iterations: %lld, opt_yield: %d, lock type: %d", num_threads, num_iterations, opt_yield, current_lock);
