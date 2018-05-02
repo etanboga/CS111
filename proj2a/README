@@ -6,3 +6,28 @@ Resources:
 
 For enum usage: https://bytes.com/topic/c/answers/741829-difference-between-typedef-enum-enum
 
+QUESTIONS:
+
+QUESTION 2.1.1 - causing conflicts:
+
+Why does it take many iterations before errors are seen?
+
+If we don’t have many iterations, it is less probable for multiple threads to enter add at the same time. As iterations increase, there are more chances for multiple threads to enter the add function, causing an incorrect value.
+
+Why does a significantly smaller number of iterations so seldom fail?
+
+Because with a small number of iterations, we don’t have a big window where we could see a race condition. So the possibility that multiple threads enter the add function at the same time is much less. 
+
+QUESTION 2.1.2 - cost of yielding:
+Why are the --yield runs so much slower?
+
+We will have more context switches through yield runs (change process state from running to ready and vice versa)
+
+Where is the additional time going?
+
+The additional time goes to frequent context switches through the sched_yield() call
+
+Is it possible to get valid per-operation timings if we are using the --yield option?
+If so, explain how. If not, explain why not.
+
+At the current state, it is not possible to get valid per operation timings, as the overhead from context switches also add to the actual value. We could try coming up with an average time that a call to sched_yield() takes and subtract that from the rest of the per operation time, but that still wouldn’t be fully accurate for every calculation. Hence it is hard, if not impossible to get valid per operation timings (in a real world setting)
