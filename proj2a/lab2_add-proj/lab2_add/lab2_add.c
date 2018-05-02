@@ -10,12 +10,48 @@
 #include <time.h>
 #include <getopt.h>
 
+//a function pointer to see which function we should use
+
+void (*current_function) (long long*, long long);
+
+long long num_iterations = 1;
+int opt_yield = 0;
+
 
 
 void add(long long *pointer, long long value) {
     long long sum = *pointer + value;
+    if (opt_yield)
+        sched_yield();
     *pointer = sum;
 }
+
+void add_mutex(long long *pointer, long long value) {
+    long long sum = *pointer + value;
+    *pointer = sum;
+}
+
+void add_spin(long long *pointer, long long value) {
+    long long sum = *pointer + value;
+    *pointer = sum;
+}
+
+void add_sync(long long *pointer, long long value) {
+    long long sum = *pointer + value;
+    *pointer = sum;
+}
+
+void* thread_compute(void* counter) {
+    int i;
+    for (i = 0; i< num_iterations; i++) {
+        current_function((long long *) counter, -1);
+    }
+    for (i = 0; i< num_iterations; i++) {
+        current_function((long long *) counter, 1);
+    }
+    return NULL;
+}
+
 
 typedef enum locks {
     none, mutex, spin, compare_and_swap
@@ -39,8 +75,6 @@ int main(int argc, char **argv) {
     int debug = 0;
     pthread_t *threads;
     int num_threads = 1;
-    int num_iterations = 1;
-    int opt_yield = 0;
     long long counter = 0;
     static struct option long_options[] = {
         {"threads", required_argument, 0, 't'},
@@ -56,7 +90,7 @@ int main(int argc, char **argv) {
                 num_threads = atoi(optarg);
                 break;
             case 'i':
-                num_iterations = atoi(optarg);
+                num_iterations = strtoll(optarg, NULL, 10);
                 break;
             case 's':
             {
@@ -82,7 +116,56 @@ int main(int argc, char **argv) {
     }
     if (debug) {
         //check if arguments passed properly
-        printf("Passed in arguments are: num_threads: %d, num_iterations: %d, opt_yield: %d, lock type: %d", num_threads, num_iterations, opt_yield, current_lock);
+        printf("Passed in arguments are: num_threads: %d, num_iterations: %lld, opt_yield: %d, lock type: %d", num_threads, num_iterations, opt_yield, current_lock);
     }
+    threads = malloc(num_threads*sizeof(pthread_t));
+    char* lock_text = "none";
+    switch (current_lock) {
+        case none:
+            current_function = add;
+            lock_text = "none";
+            break;
+        case mutex:
+            current_function = add_mutex;
+            lock_text = "m";
+            break;
+        case spin:
+            current_function = add_spin;
+            lock_text = "s";
+            break;
+        case compare_and_swap:
+            current_function = add_sync;
+            lock_text = "c";
+            break;
+        default:
+            if (debug) {
+                printf("Entered impossible condition in current_lock switch, must be a problem");
+            }
+            break;
+    }
+    struct timespec start_time, end_time;
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time) != 0) {
+        print_error_and_exit("Couldn't get clock time for start time", errno);
+    }
+    int i;
+    for (i = 0; i < num_threads; i++) {
+        if (pthread_create(threads + i, NULL, thread_compute, &counter) != 0) {
+            print_error_and_exit("Error creating threads", errno);
+        }
+    }
+    for (i = 0; i < num_threads; i++) {
+        if (pthread_join(*(threads + i), NULL) != 0) {
+            print_error_and_exit("Error joining threads", errno);
+        }
+    }
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time) != 0) {
+        print_error_and_exit("Couldn't get clock time for end time", errno);
+    }
+    long long nanoseconds = (end_time.tv_sec - start_time.tv_sec) * 1000000000L + (end_time.tv_nsec - start_time.tv_nsec);
+    long long total_runtime = num_threads * num_iterations * 2;
+    printf("add%s-%s,%d,%lld,%lld,%lld,%lld,%lld\n",
+           opt_yield == 1 ? "-yield" : "", lock_text, num_threads, num_iterations, total_runtime, nanoseconds, nanoseconds / total_runtime, counter);
+    free(threads);
+    exit(EXIT_SUCCESS);
 }
 
