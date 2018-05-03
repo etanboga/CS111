@@ -31,3 +31,11 @@ Is it possible to get valid per-operation timings if we are using the --yield op
 If so, explain how. If not, explain why not.
 
 At the current state, it is not possible to get valid per operation timings, as the overhead from context switches also add to the actual value. We could try coming up with an average time that a call to sched_yield() takes and subtract that from the rest of the per operation time, but that still wouldn’t be fully accurate for every calculation. Hence it is hard, if not impossible to get valid per operation timings (in a real world setting)
+
+
+QUESTION 2.1.3 - measurement errors:
+Why does the average cost per operation drop with increasing iterations?
+
+Firstly, the part to create threads ##CONTINUE ON FROM HERE!!
+
+If the cost per iteration is a function of the number of iterations, how do we know how many iterations to run (or what the "correct" cost is)?

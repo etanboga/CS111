@@ -57,13 +57,12 @@ void add_spin(long long *pointer, long long value) {
 void add_sync(long long *pointer, long long value) {
     long long expected;
     long long sum;
-    do {
-        sum  = *pointer + value;
+    do{
         expected = *pointer;
-        if (opt_yield) {
+        sum = *pointer + value;
+        if(opt_yield)
             sched_yield();
-        }
-    } while ( expected != __sync_val_compare_and_swap(pointer, expected, sum));
+    } while(expected != __sync_val_compare_and_swap(pointer, expected, sum));
 }
 
 void* thread_compute(void* counter) {
