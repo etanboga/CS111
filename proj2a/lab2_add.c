@@ -68,10 +68,10 @@ void add_sync(long long *pointer, long long value) {
 void* thread_compute(void* counter) {
     int i;
     for (i = 0; i< num_iterations; i++) {
-        current_function((long long *) counter, -1);
+        current_function((long long *) counter, 1);
     }
     for (i = 0; i< num_iterations; i++) {
-        current_function((long long *) counter, 1);
+        current_function((long long *) counter, -1);
     }
     return NULL;
 }
@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
             break;
     }
     struct timespec start_time, end_time;
-    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time) != 0) {
+    if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
         print_error_and_exit("Couldn't get clock time for start time", errno);
     }
     int i;
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
             print_error_and_exit("Error joining threads", errno);
         }
     }
-    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time) != 0) {
+    if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
         print_error_and_exit("Couldn't get clock time for end time", errno);
     }
     long long nanoseconds = (end_time.tv_sec - start_time.tv_sec) * 1000000000L + (end_time.tv_nsec - start_time.tv_nsec);

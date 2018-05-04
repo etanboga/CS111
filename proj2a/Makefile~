@@ -8,8 +8,10 @@ default: build
 
 build:
 	gcc -pthread -g -Wall -Wextra lab2_add.c -o lab2_add
+	#gcc -pthread -g -Wall -Wextra lab2_list.c -o lab2_list
 graphs:	tests
 	gnuplot lab2_add.gp
+	#gnuplot lab2_list.gp
 clean:
 	rm -rf *.png *.csv lab2_add *.o lab2_list
 dist: graphs
@@ -109,3 +111,18 @@ tests: clean build
 	./lab2_add --threads=4 --iterations=1000 --yield --sync=s >> lab2_add.csv
 	./lab2_add --threads=8 --iterations=1000 --yield --sync=s >> lab2_add.csv
 	./lab2_add --threads=12 --iterations=1000 --yield --sync=s >> lab2_add.csv
+	./lab2_add --threads=1  --iterations=10000 --sync=m >> lab2_add.csv
+	./lab2_add --threads=2  --iterations=10000 --sync=m >> lab2_add.csv
+	./lab2_add --threads=4  --iterations=10000 --sync=m >> lab2_add.csv
+	./lab2_add --threads=8  --iterations=10000 --sync=m >> lab2_add.csv
+	./lab2_add --threads=12 --iterations=10000 --sync=m >> lab2_add.csv
+	./lab2_add --threads=1  --iterations=10000 --sync=c >> lab2_add.csv
+	./lab2_add --threads=2  --iterations=10000 --sync=c >> lab2_add.csv
+	./lab2_add --threads=4  --iterations=10000 --sync=c >> lab2_add.csv
+	./lab2_add --threads=8  --iterations=10000 --sync=c >> lab2_add.csv
+	./lab2_add --threads=12 --iterations=10000 --sync=c >> lab2_add.csv
+	./lab2_add --threads=1  --iterations=10000 --sync=s >> lab2_add.csv
+	./lab2_add --threads=2  --iterations=10000 --sync=s >> lab2_add.csv
+	./lab2_add --threads=4  --iterations=10000 --sync=s >> lab2_add.csv
+	./lab2_add --threads=8  --iterations=10000 --sync=s >> lab2_add.csv
+	./lab2_add --threads=12 --iterations=10000 --sync=s >> lab2_add.csv

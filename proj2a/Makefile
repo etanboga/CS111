@@ -8,8 +8,10 @@ default: build
 
 build:
 	gcc -pthread -g -Wall -Wextra lab2_add.c -o lab2_add
+	gcc -pthread -g -Wall -Wextra SortedList.c lab2_list.c -o lab2_list
 graphs:	tests
 	gnuplot lab2_add.gp
+	#gnuplot lab2_list.gp
 clean:
 	rm -rf *.png *.csv lab2_add *.o lab2_list
 dist: graphs
