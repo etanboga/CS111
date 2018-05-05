@@ -8,6 +8,8 @@ For enum usage: https://bytes.com/topic/c/answers/741829-difference-between-type
 
 For clock struct: https://www.cs.rutgers.edu/~pxk/416/notes/c-tutorials/gettime.html
 
+Passing arguments through a thread: https://www.linuxquestions.org/questions/programming-9/a-question-about-passing-arguments-into-a-pthread-in-c-920640/
+
 
 QUESTIONS:
 
