@@ -11,13 +11,13 @@ void SortedList_insert(SortedList_t *list, SortedListElement_t *element) {
     if (list == NULL) {
         return;
     }
-    SortedListElement_t *curr = list->next;
-    while (curr->next != NULL && (strcmp(curr->key, element->key) < 0)) {
+    SortedListElement_t* curr = list->next;
+    while(curr->key != NULL && strcmp(curr->key, element->key) < 0) {
         curr = curr->next;
     }
     curr->prev->next = element;
     element->prev = curr->prev;
-    if (opt_yield & INSERT_YIELD) {
+    if(opt_yield & INSERT_YIELD) {
         sched_yield();
     }
     element->next = curr;
