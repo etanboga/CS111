@@ -1,0 +1,79 @@
+NAME: Ege Tanboga
+EMAIL: ege72282@gmail.com
+ID: 304735411
+
+Resources:
+
+For enum usage: https://bytes.com/topic/c/answers/741829-difference-between-typedef-enum-enum
+
+For clock struct: https://www.cs.rutgers.edu/~pxk/416/notes/c-tutorials/gettime.html
+
+Passing arguments through a thread: https://www.linuxquestions.org/questions/programming-9/a-question-about-passing-arguments-into-a-pthread-in-c-920640/
+
+
+QUESTIONS:
+
+QUESTION 2.1.1 - causing conflicts:
+
+Why does it take many iterations before errors are seen?
+
+If we don’t have many iterations, it is less probable for multiple threads to enter add at the same time. As iterations increase, there are more chances for multiple threads to enter the add function, causing an incorrect value.
+
+Why does a significantly smaller number of iterations so seldom fail?
+
+Because with a small number of iterations, we don’t have a big window where we could see a race condition. So the possibility that multiple threads enter the add function at the same time is much less. 
+
+QUESTION 2.1.2 - cost of yielding:
+Why are the --yield runs so much slower?
+
+We will have more context switches through yield runs (change process state from running to ready and vice versa)
+
+Where is the additional time going?
+
+The additional time goes to frequent context switches through the sched_yield() call
+
+Is it possible to get valid per-operation timings if we are using the --yield option?
+If so, explain how. If not, explain why not.
+
+At the current state, it is not possible to get valid per operation timings, as the overhead from context switches also add to the actual value. Ideally, we can subtract the time coming from sched_yield() (from a theoretical standpoint). Practically, it is impossible. Since we are connecting the Wall Time, there are going to be many threads at the same time. Let’s say for a certain nanosecond 2 threads are executing the add and 6 threads execute the sched_yield(). We don’t know whether we would have to subtract the time from our calculated time or not.
+
+
+QUESTION 2.1.3 - measurement errors:
+Why does the average cost per operation drop with increasing iterations?
+
+We start our threads after noting down the time of the CPU. Creating threads is very time consuming. Most of the running time will be spent on creating the thread, instead of calling the add function. So that is why cost per operation drops with increasing iterations.
+
+If the cost per iteration is a function of the number of iterations, how do we know how many iterations to run (or what the "correct" cost is)?
+
+If we keep increasing the number of iterations, then the time creating threads will be negligible compared to the time spent in calculating the add functions. Then when we see a stable line, we can take that as the correct number of operations we should use. 
+
+
+
+QUESTION 2.1.4 - costs of serialization:
+
+Why do all of the options perform similarly for low numbers of threads?
+
+There isn’t much memory contention when the number of threads is low (since there aren’t many threads racing for the same resource)
+
+Why do the three protected operations slow down as the number of threads rises?
+
+Total running time is compromised of two parts. The first part is the add part. In between
+The add functions, if we are to take spin lock for example. We call lock and unlock. So the second part of the time is locking and unlocking. So locking and unlocking time increase as the number of threads increase because: After one thread releases the lock, our remaining threads call lock at the same time, so we keep calling test and set. Each test and set will try to update its variable. Hence inside the CPU each core will try to get exclusive write privilege. Once we successfully execute, the variable will be passed from L1 -> L2 -> L3 cache. This will lead to memory contention, since all CPUs want exclusive write, but only one of them succeeds.
+
+#########
+
+PART 2:
+
+QUESTION 2.2.1 - scalability of Mutex
+Compare the variation in time per mutex-protected operation vs the number of threads in Part-1 (adds) and Part-2 (sorted lists).
+Comment on the general shapes of the curves, and explain why they have this shape.
+Comment on the relative rates of increase and differences in the shapes of the curves, and offer an explanation for these differences.
+
+In both circumstances, the cost of mutex operation increases linearly. For the list, there is nearly a total linear relation whereas for the add, there is a sharp increase at the beginning and cost per operation actually decreases when going from 8 to 12 threads. The decrease in the increase might be because of the overhead coming from lock and unlock operations for the mutex. The difference in shapes are intuitive, as working with linked lists is a lot more complicated than a simple add function, which will result to more overhead for the list,
+
+QUESTION 2.2.2 - scalability of spin locks
+
+Compare the variation in time per protected operation vs the number of threads for list operations protected by Mutex vs Spin locks. Comment on the general shapes of the curves, and explain why they have this shape.
+Comment on the relative rates of increase and differences in the shapes of the curves, and offer an explanation for these differences.
+
+For the list, the cost per operation for spin locks is always higher than the cost for mutex. In the add operation, spin lock surpasses mutex lock in 8 threads. Spin locks are generally more expensive than a mutex, because it wastes CPU cycles spinning for a resource to be open. It makes sense that spin lock surpasses mutexes for increasing number of threads, as more threads would be spinning for a resource. Hence, spin lock can be concluded to be less scalable than mutexes.
