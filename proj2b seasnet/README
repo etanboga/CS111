@@ -1,0 +1,33 @@
+NAME: Ege Tanboga
+EMAIL: ege72282@gmail.com
+ID: 304735411
+
+QUESTION 2.3.1 - Cycles in the basic list implementation:
+
+Where do you believe most of the cycles are spent in the 1 and 2-thread list tests ?
+
+Why do you believe these to be the most expensive parts of the code?
+
+Combined answer for the first two questions:
+
+4 different cases: 
+1-thread with spin lock -> most operations go to list operations as we only have one thread and there is no other thread spinning
+1-thread with mutex -> intuition: if list large, most cycles in list operations. If list small, then we do not know and we need to write experiments to verify this
+2-thread with spin lock, -> we have two threads, when one thread is modifying the list, the other one is spinning. Hence, we can say 50% of CPU cycles go to spinning and 50% to list operations
+2-thread with mutex -> if list large -> most cycles go to list operations. If list small -> it is possible that mutex will take most of the CPU cycle
+
+Where do you believe most of the time/cycles are being spent in the high-thread spin-lock tests?
+
+In spin lock - while spinning
+
+Where do you believe most of the time/cycles are being spent in the high-thread mutex tests?
+
+It is possible that most cycles are spent in the list operations assuming that the list is large
+
+
+QUESTION 2.3.2 - Execution Profiling:
+Where (what lines of code) are consuming most of the cycles when the spin-lock version of the list exerciser is run with a large number of threads?
+
+Why does this operation become so expensive with large numbers of threads?
+
+The most time is spent in the spin lock implementation, the function manipulate_list_spin.  The while condition where the waiting thread spin obtains the most CPU cycles in that function. This gets more expensive with increasing threads as there is high contention for the spin lock which means many threads are spinning waiting for the lock to be unlocked. So if there are n threads, then one of them will have the lock and n-1 of them will be spinning.
