@@ -16,3 +16,7 @@ dist: graphs
 	tar -zcvf lab2a-304735411.tar.gz *.h *.c README Makefile *.png *.csv *.gp 
 
 tests: clean build
+	for t in 1 2 4 8 12 16 24; do \
+		./lab2_list --iterations=1000 --threads=$$t --sync=m >> lab2_list.csv; \
+		./lab2_list --iterations=1000 --threads=$$t --sync=s >> lab2_list.csv ; \
+	done
