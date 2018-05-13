@@ -13,13 +13,44 @@
 #include "SortedList.h"
 #include <signal.h>
 
-pthread_mutex_t lock_mutex= PTHREAD_MUTEX_INITIALIZER;
-int lock_spin = 0;
+#define MULTIPLIER (37)
+
+unsigned long
+hash(const char *s)
+{
+    unsigned long h;
+    unsigned const char *us;
+    
+    /* cast s to unsigned const char * */
+    /* this ensures that elements of s will be treated as having values >= 0 */
+    us = (unsigned const char *) s;
+    
+    h = 0;
+    while(*us != '\0') {
+        h = h * MULTIPLIER + *us;
+        us++;
+    }
+    
+    return h;
+}
+
 int num_lists = 1;
 
 typedef enum locks {
     none, mutex, spin
 } lock_type;
+
+typedef struct sub_list {
+    SortedList_t* sublist;
+    pthread_mutex_t lock_mutex;
+    int lock_spin;
+} sub_list;
+
+typedef struct {
+    sub_list* sublists;
+    int num_lists;
+} main_list;
+main_list parent_list;
 
 lock_type current_lock = none; //use no lock by default
 
@@ -27,7 +58,6 @@ long long num_iterations = 1;
 int opt_yield = 0;
 
 
-SortedList_t* list;
 SortedListElement_t* elements;
 
 void print_guidelines_and_exit() {
@@ -59,12 +89,12 @@ void Pthread_mutex_unlock(pthread_mutex_t *lock) {
     assert(ret == 0);
 }
 
-void lock_spin_function(struct timespec* total_time) {
+void lock_spin_function(unsigned long hash_id, struct timespec* total_time) {
     struct timespec start_time, end_time;
     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
         print_error_and_exit("Couldn't get clock start time in spin function", errno);
     }
-    while (__sync_lock_test_and_set(&lock_spin, 1) == 1) {
+    while (__sync_lock_test_and_set(&parent_list.sublists[hash_id].lock_spin, 1) == 1) {
         ; //spin
     }
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
@@ -74,31 +104,31 @@ void lock_spin_function(struct timespec* total_time) {
     total_time->tv_nsec += end_time.tv_nsec - start_time.tv_nsec;
 }
 
-void lock_mutex_function(struct timespec* total_time) {
+void lock_mutex_function(unsigned long hash_id, struct timespec* total_time) {
     struct timespec start_time, end_time;
     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
         print_error_and_exit("Couldn't get clock start time in mutex function", errno);
     }
-    Pthread_mutex_lock(&lock_mutex);
+    Pthread_mutex_lock(&parent_list.sublists[hash_id].lock_mutex);
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
         print_error_and_exit("Couldn't get clock end time in mutex function", errno);
     }
     total_time->tv_sec += end_time.tv_sec - start_time.tv_sec;
     total_time->tv_nsec += end_time.tv_nsec - start_time.tv_nsec;
 }
-void lock_function(struct timespec* total_time) {
+void lock_function(unsigned long hash_id, struct timespec* total_time) {
     if (current_lock == spin) {
-        lock_spin_function(total_time);
+        lock_spin_function(hash_id, total_time);
     } else if (current_lock == mutex) {
-        lock_mutex_function(total_time);
+        lock_mutex_function(hash_id, total_time);
     }
 }
 
-void unlock() {
+void unlock(unsigned long hash_id) {
     if (current_lock == spin) {
-        __sync_lock_release(&lock_spin);
+        __sync_lock_release(&parent_list.sublists[hash_id].lock_spin);
     } else if (current_lock == mutex) {
-        Pthread_mutex_unlock(&lock_mutex);
+        Pthread_mutex_unlock(&parent_list.sublists[hash_id].lock_mutex);
     }
 }
 
@@ -107,30 +137,40 @@ void* manipulate_list(void *arg, struct timespec *total_time) {
     SortedListElement_t *start = arg;
     int i;
     for (i = 0; i < num_iterations; i++) {
+        unsigned long hash_id = hash((start + i)->key) % parent_list.num_lists;
         if (current_lock != none) {
-            lock_function(total_time);
+            lock_function(hash_id, total_time);
         }
-        SortedList_insert(list, start + i);
+        SortedList_insert(parent_list.sublists[hash_id].sublist, start + i);
         if (current_lock != none) {
-            unlock();
+            unlock(hash_id);
         }
     }
-    if (current_lock != none) {
-        lock_function(total_time);
-    }
-    int length = SortedList_length(list);
-    if (current_lock != none) {
-        unlock();
+    int length = 0;
+    for (i = 0; i < parent_list.num_lists; i++) {
+        if (current_lock != none) {
+            lock_function(i, total_time);
+        }
+        int sublist_length = SortedList_length(parent_list.sublists[i].sublist);
+        if (sublist_length == -1) {
+            fprintf(stderr, "List corrupted when measuring length");
+            exit(2);
+        }
+        length += sublist_length;
+        if (current_lock != none) {
+            unlock(i);
+        }
     }
     if (length == -1) {
-        fprintf(stderr, "List corrupted after insertion");
+        fprintf(stderr, "List corrupted after length measurement");
         exit(2);
     }
     for (i = 0; i < num_iterations; i++) {
+        unsigned long hash_id = hash((start + i)-> key) % parent_list.num_lists;
         if (current_lock != none) {
-            lock_function(total_time);
+            lock_function(hash_id, total_time);
         }
-        SortedListElement_t* search_result = SortedList_lookup(list, start[i].key);
+        SortedListElement_t* search_result = SortedList_lookup(parent_list.sublists[hash_id].sublist, start[i].key);
         if (search_result == NULL) {
             fprintf(stderr, "List corrupted when looking for inserted element");
             exit(2);
@@ -141,7 +181,7 @@ void* manipulate_list(void *arg, struct timespec *total_time) {
             exit(2);
         }
         if (current_lock != none) {
-            unlock();
+            unlock(hash_id);
         }
     }
     return total_time;
@@ -244,7 +284,7 @@ int main(int argc, char **argv) {
     }
     if (debug) {
         //check if arguments passed properly
-        printf("Passed in arguments are: num_threads: %d, num_iterations: %lld, insert_yield: %d, delete_yield: %d, lookup_yield: %d, lock type: %d", num_threads, num_iterations, insert_yield, delete_yield, lookup_yield, current_lock);
+        printf("Passed in arguments are: num_threads: %d, num_iterations: %lld, insert_yield: %d, delete_yield: %d, lookup_yield: %d, lock type: %d, num_lists: %d", num_threads, num_iterations, insert_yield, delete_yield, lookup_yield, current_lock, num_lists);
     }
     if (signal(SIGSEGV, signal_handler) == SIG_ERR) {
         print_error_and_exit("Error setting up signal handler", errno);
@@ -268,11 +308,28 @@ int main(int argc, char **argv) {
             break;
     }
     
-    list  = malloc(sizeof(SortedList_t));
+    parent_list.num_lists = num_lists;
+    parent_list.sublists = malloc(num_lists * sizeof(*parent_list.sublists));
+    if (parent_list.sublists == NULL) {
+        print_error_and_exit("Couldn't allocate memory for sublists", errno);
+    }
+    memset(parent_list.sublists, 0, num_lists * sizeof(*parent_list.sublists));
+    
+    //initialization for sublists
+    
+    int l;
+    for (l = 0; l < num_lists; l++) {
+        sub_list * lsub = parent_list.sublists + l;
+        lsub->sublist = malloc(sizeof(SortedList_t));
+        if (lsub->sublist == NULL) {
+            print_error_and_exit("Coudln't allocate memory for sublist", errno);
+        }
+        lsub->sublist->key = NULL;
+        lsub->sublist->next = lsub->sublist->prev = lsub->sublist;
+        pthread_mutex_init(&lsub->lock_mutex, NULL);
+        lsub->lock_spin = 0;
+    }
     threads = malloc(sizeof(pthread_t) * num_threads);
-    list->prev = list;
-    list->next = list;
-    list->key= NULL;
     long long num_elements = num_threads * num_iterations;
     elements = malloc(sizeof(SortedListElement_t) * num_elements);
     generate_elements(num_elements);
@@ -311,13 +368,8 @@ int main(int argc, char **argv) {
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
         print_error_and_exit("Couldn't get clock time for end time", errno);
     }
-    if (SortedList_length(list) != 0) {
-        fprintf(stderr, "Error: Sorted list doesn't have length 0 at the end of computation");
-        exit(2);
-    }
     free(threads);
     free(elements);
-    free(list);
     long long nanoseconds = (end_time.tv_sec - start_time.tv_sec) * 1000000000L + (end_time.tv_nsec - start_time.tv_nsec);
     long long lock_nanoseconds = time_locked.tv_nsec + 1000000000L * time_locked.tv_sec;
     if (debug) {

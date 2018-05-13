@@ -4,6 +4,10 @@ ID: 304735411
 
 Resources utilized: https://stackoverflow.com/questions/6626685/how-does-pthread-join-populate-the-variable-of-thread-result
 
+Hash function taken from:
+
+http://www.cs.yale.edu/homes/aspnes/pinewiki/C(2f)HashTables.html?highlight=%28CategoryAlgorithmNotes%29 (Seen in multiplication method)
+
 SortedList.h: Interface for sorted list
 SortedList.c: implementation of functions of sorted list
 lab2_list.c: adds list partitioning to the implementation from project 2a
