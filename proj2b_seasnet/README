@@ -61,3 +61,18 @@ The average lock wait time increases dramatically with increasing contending thr
 Completion time per operation rises less dramatically because of caching. If we have a lot of threads, then when a thread has the lock L1 and L2 will contain useless data and this will inhibit us from using caching effectively, and resort to memory, which increases the completion time per operation
 
 The time to complete a list operation is roughly constant (if the list is of a certain size). However, as number of threads increase, contention will increase which means threads will spend more time waiting than performing the operation. Hence, the wait time per operation goes up faster
+
+QUESTION 2.3.4 - Performance of Partitioned Lists
+Explain the change in performance of the synchronized methods as a function of the number of lists.
+
+As we add more lists, throughput increases as there is less contention for a lock on a single list and the lists are smaller
+
+Should the throughput continue increasing as the number of lists is further increased? If not, explain why not.
+
+If we continue increasing the number of sublists, the list size will keep getting smaller. Insert and lookup are both O(n). The time for each operation is going to keep decreasing, which means we will spend fewer time in the list operation. Eventually we will reach an upper bound for throughput (when we reach the number of cores)
+
+It seems reasonable to suggest the throughput of an N-way partitioned list should be equivalent to the throughput of a single list with fewer (1/N) threads. Does this appear to be true in the above curves? If not, explain why not.
+
+##ANSWER AFTER LOOKING AT GRAPHS
+
+
