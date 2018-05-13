@@ -64,4 +64,4 @@ plot \
         title 'completion time' with linespoints lc rgb 'red', \
      "< grep 'list-none-m,[0-9]*,1000,1,' lab2b_list.csv" \
         using ($2):($8) \
-        title 'wait for lock' with linespoints lc rgb 'green'"
+        title 'wait for lock' with linespoints lc rgb 'green'
