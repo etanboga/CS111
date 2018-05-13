@@ -16,127 +16,18 @@
 pthread_mutex_t lock_mutex= PTHREAD_MUTEX_INITIALIZER;
 int lock_spin = 0;
 
-long long num_iterations = 1;
-int opt_yield = 0;
-
-void* (*current_function)(void *);
-
-SortedList_t* list;
-SortedListElement_t* elements;
-
-//wrappers for mutex_lock
-
-void Pthread_mutex_lock(pthread_mutex_t *lock) {
-    int ret = pthread_mutex_lock(lock);
-    assert(ret == 0);
-}
-
-void Pthread_mutex_unlock(pthread_mutex_t *lock) {
-    int ret = pthread_mutex_unlock(lock);
-    assert(ret == 0);
-}
-void* manipulate_list(void *arg) {
-    SortedListElement_t *start = arg;
-    int i;
-    for (i = 0; i < num_iterations; i++) {
-        SortedList_insert(list, start + i);
-    }
-    int length = SortedList_length(list);
-    if (length == -1) {
-        fprintf(stderr, "List corrupted after insertion");
-        exit(2);
-    }
-    for (i = 0; i < num_iterations; i++) {
-        SortedListElement_t* search_result = SortedList_lookup(list, start[i].key);
-        if (search_result == NULL) {
-            fprintf(stderr, "List corrupted when looking for inserted element");
-            exit(2);
-        }
-        int delete_ret = SortedList_delete(search_result);
-        if (delete_ret == 1) {
-            fprintf(stderr, "List corrupted while deletion");
-            exit(2);
-        }
-    }
-    return NULL;
-}
-
-void* manipulate_list_mutex(void *arg) {
-    SortedListElement_t *start = arg;
-    int i;
-    for (i = 0; i < num_iterations; i++) {
-        Pthread_mutex_lock(&lock_mutex);
-        SortedList_insert(list, start + i);
-        Pthread_mutex_unlock(&lock_mutex);
-    }
-    Pthread_mutex_lock(&lock_mutex);
-    int length = SortedList_length(list);
-    Pthread_mutex_unlock(&lock_mutex);
-    if (length == -1) {
-        fprintf(stderr, "List corrupted after insertion");
-        exit(2);
-    }
-    for (i = 0; i < num_iterations; i++) {
-        Pthread_mutex_lock(&lock_mutex);
-        SortedListElement_t* search_result = SortedList_lookup(list, start[i].key);
-        if (search_result == NULL) {
-            fprintf(stderr, "List corrupted when looking for inserted element");
-            exit(2);
-        }
-        int delete_ret = SortedList_delete(search_result);
-        Pthread_mutex_unlock(&lock_mutex);
-        if (delete_ret == 1) {
-            fprintf(stderr, "List corrupted while deletion");
-            exit(2);
-        }
-    }
-    return NULL;
-}
-
-void* manipulate_list_spin(void *arg) {
-    SortedListElement_t *start = arg;
-    int i;
-    for (i = 0; i < num_iterations; i++) {
-        while (__sync_lock_test_and_set(&lock_spin, 1) == 1) {
-            ; //spin
-        }
-        SortedList_insert(list, start + i);
-        __sync_lock_release(&lock_spin);
-    }
-    while (__sync_lock_test_and_set(&lock_spin, 1) == 1) {
-        ; //spin
-    }
-    int length = SortedList_length(list);
-    __sync_lock_release(&lock_spin);
-    if (length == -1) {
-        fprintf(stderr, "List corrupted after insertion");
-        exit(2);
-    }
-    for (i = 0; i < num_iterations; i++) {
-        while (__sync_lock_test_and_set(&lock_spin, 1) == 1) {
-            ; //spin
-        }
-        SortedListElement_t* search_result = SortedList_lookup(list, start[i].key);
-        if (search_result == NULL) {
-            fprintf(stderr, "List corrupted when looking for inserted element");
-            exit(2);
-        }
-        int delete_ret = SortedList_delete(search_result);
-        __sync_lock_release(&lock_spin);
-        if (delete_ret == 1) {
-            fprintf(stderr, "List corrupted while deletion");
-            exit(2);
-        }
-    }
-    return NULL;
-}
-
-
 typedef enum locks {
     none, mutex, spin
 } lock_type;
 
 lock_type current_lock = none; //use no lock by default
+
+long long num_iterations = 1;
+int opt_yield = 0;
+
+
+SortedList_t* list;
+SortedListElement_t* elements;
 
 void print_guidelines_and_exit() {
     printf("Usage: ./lab2_list --threads=num_threads --iterations=num_iterations --yield=[idl] --sync=[ms] \n");
@@ -153,6 +44,106 @@ void signal_handler(int signal) {
         fprintf(stderr, "Caught a segmentation fault, error: %d, error message: %s \n",signal, strerror(signal));
         exit(2);
     }
+}
+
+//wrappers for mutex_lock
+
+void Pthread_mutex_lock(pthread_mutex_t *lock) {
+    int ret = pthread_mutex_lock(lock);
+    assert(ret == 0);
+}
+
+void Pthread_mutex_unlock(pthread_mutex_t *lock) {
+    int ret = pthread_mutex_unlock(lock);
+    assert(ret == 0);
+}
+
+void lock_spin_function(struct timespec* total_time) {
+    struct timespec start_time, end_time;
+    if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
+        print_error_and_exit("Couldn't get clock start time in spin function", errno);
+    }
+    while (__sync_lock_test_and_set(&lock_spin, 1) == 1) {
+        ; //spin
+    }
+    if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
+        print_error_and_exit("Couldn't get clock end time in spin function", errno);
+    }
+    total_time->tv_sec += end_time.tv_sec - start_time.tv_sec;
+    total_time->tv_nsec += end_time.tv_nsec - start_time.tv_nsec;
+}
+
+void lock_mutex_function(struct timespec* total_time) {
+    struct timespec start_time, end_time;
+    if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
+        print_error_and_exit("Couldn't get clock start time in mutex function", errno);
+    }
+    Pthread_mutex_lock(&lock_mutex);
+    if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
+        print_error_and_exit("Couldn't get clock end time in mutex function", errno);
+    }
+    total_time->tv_sec += end_time.tv_sec - start_time.tv_sec;
+    total_time->tv_nsec += end_time.tv_nsec - start_time.tv_nsec;
+}
+void lock_function(struct timespec* total_time) {
+    if (current_lock == spin) {
+        lock_spin_function(total_time);
+    } else if (current_lock == mutex) {
+        lock_mutex_function(total_time);
+    }
+}
+
+void unlock() {
+    if (current_lock == spin) {
+        __sync_lock_release(&lock_spin);
+    } else if (current_lock == mutex) {
+        Pthread_mutex_unlock(&lock_mutex);
+    }
+}
+
+
+void* manipulate_list(void *arg, struct timespec *total_time) {
+    SortedListElement_t *start = arg;
+    int i;
+    for (i = 0; i < num_iterations; i++) {
+        if (current_lock != none) {
+            lock_function(total_time);
+        }
+        SortedList_insert(list, start + i);
+        if (current_lock != none) {
+            unlock();
+        }
+    }
+    if (current_lock != none) {
+        lock_function(total_time);
+    }
+    int length = SortedList_length(list);
+    if (current_lock != none) {
+        unlock();
+    }
+    if (length == -1) {
+        fprintf(stderr, "List corrupted after insertion");
+        exit(2);
+    }
+    for (i = 0; i < num_iterations; i++) {
+        if (current_lock != none) {
+            lock_function(total_time);
+        }
+        SortedListElement_t* search_result = SortedList_lookup(list, start[i].key);
+        if (search_result == NULL) {
+            fprintf(stderr, "List corrupted when looking for inserted element");
+            exit(2);
+        }
+        int delete_ret = SortedList_delete(search_result);
+        if (delete_ret == 1) {
+            fprintf(stderr, "List corrupted while deletion");
+            exit(2);
+        }
+        if (current_lock != none) {
+            unlock();
+        }
+    }
+    return total_time;
 }
 
 void generate_elements(long long num_elements) {
@@ -172,6 +163,17 @@ void generate_elements(long long num_elements) {
     }
 }
 
+void* current_function(void *arg) {
+    struct timespec *total_time = NULL;
+    if (current_lock != none) {
+        total_time = malloc(sizeof(*total_time));
+        if (total_time == NULL) {
+            print_error_and_exit("Error allocating memory for counter", errno);
+        }
+        memset(total_time, 0, sizeof(*total_time));
+    }
+    return manipulate_list(arg, total_time);
+}
 
 int main(int argc, char **argv) {
     int option;
@@ -246,15 +248,12 @@ int main(int argc, char **argv) {
     char* lock_text = "none";
     switch (current_lock) {
         case none:
-            current_function = manipulate_list;
             lock_text = "none";
             break;
         case mutex:
-            current_function = manipulate_list_mutex;
             lock_text = "m";
             break;
         case spin:
-            current_function = manipulate_list_spin;
             lock_text = "s";
             break;
         default:
@@ -277,6 +276,8 @@ int main(int argc, char **argv) {
     }
     int i;
     struct timespec start_time, end_time;
+    struct timespec time_locked;
+    memset(&time_locked, 0, sizeof(time_locked));
     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
         print_error_and_exit("Couldn't get clock time for start time", errno);
     }
@@ -288,10 +289,18 @@ int main(int argc, char **argv) {
         }
     }
     for (i = 0; i < num_threads; i++) {
-        if (pthread_join(threads[i], NULL) != 0) {
+        void *total_time;
+        if (pthread_join(threads[i], &total_time) != 0) {
             print_error_and_exit("Error: joining threads", errno);
+        }
+        if (total_time != NULL) {
+            time_locked.tv_sec += ((struct timespec *) total_time)->tv_sec;
+            time_locked.tv_nsec += ((struct timespec *) total_time)->tv_nsec;
+            if (debug) {
+                printf("Time in nanoseconds: %ld \n", time_locked.tv_nsec + 1000000000L * time_locked.tv_sec);
+            }
         } else if (debug) {
-            printf("Joining thread: %d", i);
+            printf("total time is null");
         }
     }
     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
@@ -306,8 +315,14 @@ int main(int argc, char **argv) {
     free(list);
     long long nanoseconds = (end_time.tv_sec - start_time.tv_sec) * 1000000000L + (end_time.tv_nsec - start_time.tv_nsec);
     int num_lists = 1;
+    long long lock_nanoseconds = time_locked.tv_nsec + 1000000000L * time_locked.tv_sec;
+    if (debug) {
+        printf("Lock nanoseconds: %lld", lock_nanoseconds);
+    }
+    long long lock_operations_performed = num_threads * 3 * (num_iterations + 1);
     long long operations_performed = num_threads * num_iterations * 3;
     long long avg_per_op = nanoseconds / operations_performed;
+    long long avg_per_lock = lock_nanoseconds / lock_operations_performed;
     char *yield_description = "test"; //should never be test
     if (opt_yield == 0) {
         yield_description = "none";
@@ -326,7 +341,7 @@ int main(int argc, char **argv) {
     } else {
         yield_description = "d";
     }
-    printf("list-%s-%s,%d,%lld,%d,%lld,%lld,%lld \n", yield_description, lock_text, num_threads, num_iterations, num_lists, operations_performed, nanoseconds, avg_per_op);
+    printf("list-%s-%s,%d,%lld,%d,%lld,%lld,%lld, %lld \n", yield_description, lock_text, num_threads, num_iterations, num_lists, operations_performed, nanoseconds, avg_per_op, avg_per_lock);
     exit(EXIT_SUCCESS);
 }
 

@@ -11,7 +11,7 @@ build:
 graphs:	tests
 	gnuplot lab2_list.gp
 clean:
-	rm -rf *.o lab2_list
+	rm -rf *.o lab2_list *.csv *.png
 dist: graphs
 	tar -zcvf lab2a-304735411.tar.gz *.h *.c README Makefile *.png *.csv *.gp 
 
@@ -20,10 +20,9 @@ tests: clean build
 		./lab2_list --iterations=1000 --threads=$$t --sync=m >> lab2b_list.csv; \
 		./lab2_list --iterations=1000 --threads=$$t --sync=s >> lab2b_list.csv ; \
 	done
-
 profile: clean build
 	rm -f ./raw.gperf
 	LD_PRELOAD=/usr/lib64/libprofiler.so.0 CPUPROFILE=./raw.gperf ./lab2_list --threads=12 --iterations=1000 --sync=s
 	pprof --text ./lab2_list ./raw.gperf > profile.out
-	pprof --list=manipulate_list_spin ./lab2_list ./raw.gperf >> profile.out 
+	pprof --list=lock_spin_function ./lab2_list ./raw.gperf >> profile.out 
 	rm -f ./raw.gperf

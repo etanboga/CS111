@@ -34,18 +34,34 @@
 set terminal png
 set datafile separator ","
 
-set title "Scalability-1: Throughput of synchronized lists"
+set title "Scalability-1: Throughput of Synchronized Lists"
 set xlabel "Threads"
-set ylabel "Throughput (operations/sec)"
 set xrange [0.75:]
 set logscale x 2
+set ylabel "Throughput (operations/sec)"
 set logscale y 10
 set output 'lab2b_1.png'
 
 plot \
-     "< grep 'list-none-m,[0-9]\\+,1000,1,' lab2b_list.csv" \
+     "< grep 'list-none-m,[0-9]*,1000,1,' lab2b_list.csv" \
         using ($2):(1000000000/($7)) \
         title 'list ins/lookup/delete w/mutex' with linespoints lc rgb 'red', \
-     "< grep 'list-none-s,[0-9]\\+,1000,1,' lab2b_list.csv" \
+     "< grep 'list-none-s,[0-9]*,1000,1,' lab2b_list.csv" \
         using ($2):(1000000000/($7)) \
 	title 'list ins/lookup/delete w/spin' with linespoints lc rgb 'green'
+
+set title "Scalability-2: Per-operation Times for Mutex-Protected List Operations"
+set xlabel "Threads"
+set xrange [0.75:]
+set logscale x 2
+set ylabel "mean time/operation (ns)"
+set logscale y 10
+set output 'lab2b_2.png'
+
+plot \
+     "<grep 'list-none-m,[0-9]*,1000,1,' lab2b_list.csv" \
+      using ($2):($7) \
+        title 'completion time' with linespoints lc rgb 'red', \
+     "< grep 'list-none-m,[0-9]*,1000,1,' lab2b_list.csv" \
+        using ($2):($8) \
+        title 'wait for lock' with linespoints lc rgb 'green'"
