@@ -15,6 +15,7 @@
 
 pthread_mutex_t lock_mutex= PTHREAD_MUTEX_INITIALIZER;
 int lock_spin = 0;
+int num_lists = 1;
 
 typedef enum locks {
     none, mutex, spin
@@ -30,7 +31,7 @@ SortedList_t* list;
 SortedListElement_t* elements;
 
 void print_guidelines_and_exit() {
-    printf("Usage: ./lab2_list --threads=num_threads --iterations=num_iterations --yield=[idl] --sync=[ms] \n");
+    printf("Usage: ./lab2_list --threads=num_threads --iterations=num_iterations --lists=num_lists --yield=[idl] --sync=[ms] \n");
     exit(EXIT_FAILURE);
 }
 
@@ -185,6 +186,7 @@ int main(int argc, char **argv) {
         {"iterations", required_argument, 0, 'i'},
         {"yield", required_argument, 0, 'y'},
         {"sync", required_argument, 0, 's'},
+        {"lists", required_argument, 0, 'l'},
         {"debug", no_argument, 0, 'd'},
         {0, 0, 0, 0}
     };
@@ -229,6 +231,9 @@ int main(int argc, char **argv) {
                     print_guidelines_and_exit();
                 }
             }
+                break;
+            case 'l':
+                num_lists = atoi(optarg);
                 break;
             case 'd':
                 debug = 1;
@@ -314,7 +319,6 @@ int main(int argc, char **argv) {
     free(elements);
     free(list);
     long long nanoseconds = (end_time.tv_sec - start_time.tv_sec) * 1000000000L + (end_time.tv_nsec - start_time.tv_nsec);
-    int num_lists = 1;
     long long lock_nanoseconds = time_locked.tv_nsec + 1000000000L * time_locked.tv_sec;
     if (debug) {
         printf("Lock nanoseconds: %lld", lock_nanoseconds);
@@ -341,7 +345,7 @@ int main(int argc, char **argv) {
     } else {
         yield_description = "d";
     }
-    printf("list-%s-%s,%d,%lld,%d,%lld,%lld,%lld, %lld \n", yield_description, lock_text, num_threads, num_iterations, num_lists, operations_performed, nanoseconds, avg_per_op, avg_per_lock);
+    printf("list-%s-%s,%d,%lld,%d,%lld,%lld,%lld,%lld \n", yield_description, lock_text, num_threads, num_iterations, num_lists, operations_performed, nanoseconds, avg_per_op, avg_per_lock);
     exit(EXIT_SUCCESS);
 }
 
