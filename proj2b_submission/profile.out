@@ -1,0 +1,41 @@
+Total: 4355 samples
+    4170  95.8%  95.8%     4171  95.8% lock_spin_function
+     126   2.9%  98.6%      148   3.4% SortedList_lookup
+      44   1.0%  99.7%       44   1.0% __strcmp_sse42
+       8   0.2%  99.8%       34   0.8% SortedList_insert
+       4   0.1%  99.9%        4   0.1% _init
+       1   0.0% 100.0%        1   0.0% SortedList_length
+       1   0.0% 100.0%        1   0.0% __GI___clock_gettime
+       1   0.0% 100.0%     4355 100.0% manipulate_list
+       0   0.0% 100.0%     4355 100.0% __clone
+       0   0.0% 100.0%     4355 100.0% current_function
+       0   0.0% 100.0%     4171  95.8% lock_function
+       0   0.0% 100.0%     4355 100.0% start_thread
+ROUTINE ====================== lock_spin_function in /u/cs/ugrad/ege/CS111/proj2b seasnet/lab2_list.c
+  4170   4171 Total samples (flat / cumulative)
+     .      .   56: void Pthread_mutex_unlock(pthread_mutex_t *lock) {
+     .      .   57:     int ret = pthread_mutex_unlock(lock);
+     .      .   58:     assert(ret == 0);
+     .      .   59: }
+     .      .   60: 
+---
+     .      .   61: void lock_spin_function(struct timespec* total_time) {
+     .      .   62:     struct timespec start_time, end_time;
+     .      .   63:     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
+     .      .   64:         print_error_and_exit("Couldn't get clock start time in spin function", errno);
+     .      .   65:     }
+  4170   4170   66:     while (__sync_lock_test_and_set(&lock_spin, 1) == 1) {
+     .      .   67:         ; //spin
+     .      .   68:     }
+     .      1   69:     if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
+     .      .   70:         print_error_and_exit("Couldn't get clock end time in spin function", errno);
+     .      .   71:     }
+     .      .   72:     total_time->tv_sec += end_time.tv_sec - start_time.tv_sec;
+     .      .   73:     total_time->tv_nsec += end_time.tv_nsec - start_time.tv_nsec;
+     .      .   74: }
+---
+     .      .   75: 
+     .      .   76: void lock_mutex_function(struct timespec* total_time) {
+     .      .   77:     struct timespec start_time, end_time;
+     .      .   78:     if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
+     .      .   79:         print_error_and_exit("Couldn't get clock start time in mutex function", errno);
