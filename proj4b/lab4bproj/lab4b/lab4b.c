@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mraa/aio.h>
+#define BUFFERSIZE 256
 
 sig_atomic_t volatile run_flag = 1;
 const nfds_t NUM_FDS = 1;
@@ -38,7 +39,8 @@ int log_flag = 0;
 int debug = 0;
 char* logfile = NULL;
 int log_fd;
-int can_continue = 1; //checks if our polling should continue, set to false if stop read in commands
+int can_continue = 1; //checks if our output should continue, set to false if stop read in commands
+
 
 void print_error_and_exit(char* error_message, int error_no) {
     fprintf(stderr, "%s, error = %d, message = %s \n", error_message, error_no, strerror(error_no));
@@ -56,6 +58,77 @@ ssize_t secure_write(int fd, void* buffer, size_t size) {
         print_error_and_exit("Error writing bytes", errno);
     }
     return bytes_written;
+}
+
+void* secure_malloc(size_t size) {
+    void* return_ptr = malloc(size);
+    if (return_ptr == NULL) {
+        print_error_and_exit("Error in malloc", errno);
+    }
+    return return_ptr;
+}
+
+void get_command(char* command) {
+    unsigned long length = strlen(command);
+    if (strcmp(command, "SCALE=F") == 0) {
+        is_fahrenheit = 1;
+    } else if (strcmp(command, "SCALE=C") == 0) {
+        is_fahrenheit = 0;
+    } else if (strcmp(command, "STOP") == 0) {
+        can_continue = 0;
+    } else if (strcmp(command, "START") == 0) {
+        can_continue = 1;
+    } else if (strcmp(command, "OFF") == 0) {
+        run_flag = 0;
+    } else if (memcmp(command, "PERIOD=", 7) == 0 && length > 7) {
+        char* period_string = secure_malloc((length - 7) * sizeof(char));
+        memcpy(period_string, &command[7], length - 7);
+        int new_period = atoi(period_string);
+        if (new_period > 0) {
+            period = new_period;
+        }
+        free(period_string);
+    } else if (memcmp(command, "LOG ", 4) != 0 || length < 5) { //if it is not log or if it is log but there is no line of text
+        fprintf(stdout, "Invalid commad entered");
+        return;
+    }
+    if (log_flag) {
+        secure_write(log_fd, command, length);
+        secure_write(log_fd, "\n" , 1);
+    }
+}
+
+char input_buffer[BUFFERSIZE];
+char commands_buffer[BUFFERSIZE];
+int command_begin = 0; //tracks current position in commands_buffer
+int current_index = 0; //points to the beginning of the command being processed
+
+
+
+void process_input() {
+    ssize_t bytes_read = read(STDIN_FILENO, input_buffer, BUFFERSIZE);
+    if (bytes_read < 0) {
+        print_error_and_exit("Couldn't read input from keyboard", errno);
+    }
+    int i;
+    for (i = 0; i < bytes_read; i++) {
+        if (input_buffer[i] == '\n') { //need to process command
+            char* current_command = secure_malloc((current_index - command_begin + 1) * sizeof(char));
+            int it;
+            int comm_index = 0;
+            for(it = command_begin; it < current_index; it++){
+                current_command[comm_index] = commands_buffer[it % BUFFERSIZE];
+                comm_index++;
+            }
+            current_command[comm_index]='\0';
+            get_command(current_command);
+            free(current_command);
+            command_begin = current_index;
+        } else {
+            commands_buffer[current_index % BUFFERSIZE] = input_buffer[i]; //if we don't need to process the command, store characters in commands buffer
+            current_index++;
+        }
+    }
 }
 
 
@@ -96,14 +169,16 @@ int main(int argc, char * argv[]) {
     if (debug) {
         printf("Options passed, is_fahrenheit: %d, period: %d, logfile: %s", is_fahrenheit, period, logfile);
     }
-    if (period <= 0) {
-        print_error_and_exit("Cannot have negative period", EXIT_FAILURE);
-    }
+    
     if (log_flag) {
         log_fd = open(logfile, O_NONBLOCK | O_WRONLY | O_APPEND | O_CREAT);
         if (log_fd < 0) {
             print_error_and_exit("log file cannot be opened", errno);
         }
+    }
+    
+    if (period <= 0) {
+        print_error_and_exit("Cannot have negative period", EXIT_FAILURE);
     }
     
     //MRAA Initialization
@@ -146,6 +221,7 @@ int main(int argc, char * argv[]) {
             if (debug) {
                 printf("Input from keyboard");
             }
+            process_input();
         }
         int i;
         int end_loop = 0;
