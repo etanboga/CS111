@@ -77,12 +77,11 @@ int main(int argc, char * argv[]) {
             case 's':
                 if (strlen(optarg) == 1 && optarg[0] == 'C') {
                     is_fahrenheit = 0;
-                } else if (strlen(optarg) == 0 && optarg[0] == 'F') {
+                } else if (strlen(optarg) == 1 && optarg[0] == 'F') {
                     is_fahrenheit = 1;
-                } else if (strlen(optarg) != 0 || optarg[0] != 'F') {
+                } else {
                     print_guidelines_and_exit();
                 }
-                break;
             case 'l':
                 log_flag = 1;
                 logfile = optarg;
@@ -119,8 +118,11 @@ int main(int argc, char * argv[]) {
     fds[0].fd = STDIN_FILENO;
     fds[0].events = POLLIN|POLLHUP|POLLERR;
     int pollreturn;
+    struct timeval clock;
+    struct tm *now;
     while ((pollreturn = poll(fds, NUM_FDS, 0)) >= 0) {
         if (can_continue) {
+            gettimeofday(&clock, 0);
             int a = mraa_aio_read(temp);
             //temperature calculation
             float R = 1023.0/a - 1.0;
@@ -130,7 +132,8 @@ int main(int argc, char * argv[]) {
                 temperature = (9.0/5)*temperature + 32;
             }
             char output[70];
-            int bytes_sent = sprintf(output, "%.1f\n", temperature);
+            now = localtime(&(clock.tv_sec));
+            int bytes_sent = sprintf(output, "%02d:%02d:%02d %.1f\n", now->tm_hour, now->tm_min, now->tm_sec,temperature);
             if (bytes_sent < 0) {
                 print_error_and_exit("Cannot sprintf temperature", errno);
             }
@@ -148,8 +151,13 @@ int main(int argc, char * argv[]) {
         int end_loop = 0;
         for (i = 0; i < period; i++) {
             if (mraa_gpio_read(button) || !run_flag) {
+                gettimeofday(&clock, 0);
                 char output[70];
-                int bytes_sent = sprintf(output, "SHUTDOWN\n");
+                now = localtime(&(clock.tv_sec));
+                int bytes_sent = sprintf(output, "%02d:%02d:%02d SHUTDOWN\n",now->tm_hour, now->tm_min, now->tm_sec);
+                if (bytes_sent < 0) {
+                    print_error_and_exit("Cannot sprintf shutdown", errno);
+                }
                 secure_write(STDOUT_FILENO, output, bytes_sent);
                 if (log_flag) {
                     secure_write(log_fd, output, bytes_sent);
