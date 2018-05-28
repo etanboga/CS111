@@ -1,0 +1,20 @@
+NAME: Akshara Sundararajan,Ege Tanboga
+EMAIL: amedrops@g.ucla.edu,ege72282@gmail.com
+ID: 404731846,304735411
+
+Included Files:
+lab3a.c:C code that analyzes the an EXT2 file system image
+Makefile: Builds tar,builds program etc.
+README: Contains info about the submission
+ext2_fs.h: Header file provided in spec
+
+References used:
+http://cs.smith.edu/~nhowe/262/oldlabs/ext2.html
+http://cs.smith.edu/~nhowe/262/oldlabs/src/ext2super.c
+http://cs.smith.edu/~nhowe/262/oldlabs/src/ext2group.c
+http://cs.smith.edu/~nhowe/262/oldlabs/src/ext2list.c
+https://www.tutorialspoint.com/c_standard_library/c_function_gmtime.htm
+http://www.cplusplus.com/reference/ctime/strftime/
+http://www.nongnu.org/ext2-doc/ext2.html#I-BLOCK
+TA Code/Slides
+Piazza
