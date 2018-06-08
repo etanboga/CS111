@@ -1,0 +1,15 @@
+NAME: Ege Tanboga
+EMAIL: ege72282@gmail.com
+ID: 304735411
+
+File descriptions:
+
+lab4c_tcp.c: Source file for lab4c_tcp. The executable connects to the server with an address and a port, using TCP, then sends/receives info for the temperature sensor over a socket
+
+lab4c_tls.c: Source file for lab4c_tls. The executable connects to the server with an address and a port. This time, the server is authenticated using openSSL library and connection is encrypted.
+
+Makefile: default: compiles source files into lab4c_tcp executables
+	clean: deletes all programs and output created by the Makefile and restore the directory to its freshly untarred state
+	dist: creates the deliverable tarball
+
+README: Contains description of files, resources used and additional comments regarding the project
