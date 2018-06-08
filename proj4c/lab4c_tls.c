@@ -21,6 +21,10 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <mraa/aio.h>
+
+#include <openssl/ssl.h>
+
+
 #define BUFFERSIZE 256
 
 //Addition for Lab4c
@@ -30,16 +34,42 @@ struct sockaddr_in serveraddr;
 struct hostent* server;
 char* hostname;
 
+//SSL Client
+
+SSL* sslClient;
 
 sig_atomic_t volatile run_flag = 1;
 const nfds_t NUM_FDS = 1;
 const int B = 4275;               // B value of the thermistor
 const int R0 = 100000;            // R0 = 100k
 
+//added for lab4c
+
+void connection_error_exit(char* error_message, int error_no) {
+    fprintf(stderr, "%s, error = %d, message = %s \n", error_message, error_no, strerror(error_no));
+    exit(2);
+}
+
 
 void do_when_interrupted(int signal){
     if(signal == SIGINT)
     run_flag = 0;
+}
+
+void initialize_SSL() {
+    ERR_load_BIO_strings();
+    SSL_load_error_strings();
+    if(SSL_library_init() < 0){
+        connection_error_exit("Error: cannot initialize openSSL", errno);
+    }
+    OpenSSL_add_all_algorithms();
+}
+
+void secure_ssl_write(char* SSLbuffer, size_t nbytes){
+    int ret = SSL_write(sslClient,SSLbuffer,nbytes);
+    if(ret == 0 ) {
+        connection_error_exit("Error: couldn't perform SSL write", errno);
+    }
 }
 
 //options
@@ -57,13 +87,6 @@ int can_continue = 1; //checks if our output should continue, set to false if st
 void print_error_and_exit(char* error_message, int error_no) {
     fprintf(stderr, "%s, error = %d, message = %s \n", error_message, error_no, strerror(error_no));
     exit(EXIT_FAILURE);
-}
-
-//added for lab4c
-
-void connection_error_exit(char* error_message, int error_no) {
-    fprintf(stderr, "%s, error = %d, message = %s \n", error_message, error_no, strerror(error_no));
-    exit(2);
 }
 
 void print_guidelines_and_exit() {
@@ -125,7 +148,7 @@ int current_index = 0; //points to the beginning of the command being processed
 
 
 void process_input() {
-    ssize_t bytes_read = read(sockfd, input_buffer, BUFFERSIZE);
+    ssize_t bytes_read = SSL_read(sslClient, input_buffer, BUFFERSIZE);
     if (bytes_read < 0) {
         print_error_and_exit("Couldn't read input from keyboard", errno);
     }
@@ -149,7 +172,6 @@ void process_input() {
         }
     }
 }
-
 
 int main(int argc, char * argv[]) {
     static struct option long_options[] = {
@@ -206,6 +228,9 @@ int main(int argc, char * argv[]) {
     if (portno <= 1024) {
         print_error_and_exit("Error: invalid port number", errno);
     }
+    initialize_SSL();
+    
+    
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         connection_error_exit("Error: cannot open socket", errno);
@@ -222,9 +247,22 @@ int main(int argc, char * argv[]) {
         connection_error_exit("Error: cannot connect", errno);
     }
     
+    SSL_CTX* newContext = SSL_CTX_new(TLSv1_client_method());
+    sslClient = SSL_new(newContext);
+    if (newContext == NULL) {
+        connection_error_exit("Error: cannot create SSL Context", errno);
+    }
+    if (!SSL_set_fd(sslClient, sockfd)) {
+        connection_error_exit("Error: cannot set SSL file descriptor", errno);
+    }
+    int sslErr = SSL_connect(sslClient);
+    if (sslErr != 1) {
+        connection_error_exit("Error: couldn't connect to SSL Client", errno);
+    }
+    
     char id_buffer[20];
     int bytes_read = sprintf(id_buffer,"ID=%s\n",id_string);
-    secure_write(sockfd, id_buffer, bytes_read);
+    secure_ssl_write(id_buffer, bytes_read);
     if (log_flag) {
         secure_write(log_fd, id_buffer, bytes_read);
     }
@@ -256,7 +294,7 @@ int main(int argc, char * argv[]) {
             if (bytes_sent < 0) {
                 print_error_and_exit("Cannot sprintf temperature", errno);
             }
-            secure_write(sockfd, output, bytes_sent);
+            secure_ssl_write(output, bytes_sent);
             if (log_flag) {
                 secure_write(log_fd, output, bytes_sent);
             }
@@ -275,7 +313,7 @@ int main(int argc, char * argv[]) {
                 if (bytes_sent < 0) {
                     print_error_and_exit("Cannot sprintf shutdown", errno);
                 }
-                secure_write(sockfd, output, bytes_sent);
+                secure_ssl_write(output, bytes_sent);
                 if (log_flag) {
                     secure_write(log_fd, output, bytes_sent);
                 }
@@ -290,7 +328,9 @@ int main(int argc, char * argv[]) {
             break;
         }
     }
-    close(sockfd);
     mraa_aio_close(temp);
+    SSL_shutdown(sslClient);
+    SSL_free(sslClient);
+    close(sockfd);
     exit(EXIT_SUCCESS);
 }

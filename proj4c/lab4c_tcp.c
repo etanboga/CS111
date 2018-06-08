@@ -290,8 +290,8 @@ int main(int argc, char * argv[]) {
             break;
         }
     }
-    close(sockfd);
     mraa_aio_close(temp);
+    close(sockfd);
     exit(EXIT_SUCCESS);
 }
 

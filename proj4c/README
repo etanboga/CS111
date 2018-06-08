@@ -13,3 +13,9 @@ Makefile: default: compiles source files into lab4c_tcp executables
 	dist: creates the deliverable tarball
 
 README: Contains description of files, resources used and additional comments regarding the project
+
+Resources used:
+
+http://fm4dd.com/openssl/sslconnect.htm
+https://www.tutorialspoint.com/unix_sockets/socket_client_example.htm
+https://www.openssl.org/docs/manmaster/man7/ssl.html
